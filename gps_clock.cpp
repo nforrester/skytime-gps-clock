@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <memory>
 #include <vector>
+#include <limits>
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include "hardware/uart.h"
@@ -84,8 +85,8 @@ template <typename T>
 requires std::unsigned_integral<T>
 inline T from_big_endian(uint8_t * bytes)
 {
-    T value;
-    for (size_t value_idx = sizeof(T) - 1; value_idx >= 0; --value_idx)
+    T value = 0;
+    for (ssize_t value_idx = sizeof(T) - 1; value_idx >= 0; --value_idx)
     {
         size_t const bytes_idx = sizeof(T) - value_idx - 1;
         value <<= 8;
@@ -94,12 +95,47 @@ inline T from_big_endian(uint8_t * bytes)
     return value;
 }
 
+template <typename T, size_t size>
+concept IsWidth = sizeof(T) == size;
+
+template <typename T>
+class WidthMatch
+{
+};
+
+template <typename T>
+requires std::integral<T> && IsWidth<T, 4>
+class WidthMatch<T>
+{
+public:
+    using u = uint32_t;
+    using s = int32_t;
+};
+
+template <typename T>
+requires std::integral<T> && IsWidth<T, 2>
+class WidthMatch<T>
+{
+public:
+    using u = uint16_t;
+    using s = int16_t;
+};
+
+template <typename T>
+requires std::integral<T> && IsWidth<T, 1>
+class WidthMatch<T>
+{
+public:
+    using u = uint8_t;
+    using s = int8_t;
+};
+
 template <typename T>
 requires std::unsigned_integral<T>
-inline T from_little_endian(uint8_t * bytes)
+inline T from_little_endian(uint8_t const * const bytes)
 {
-    T value;
-    for (size_t value_idx = sizeof(T) - 1; value_idx >= 0; --value_idx)
+    T value = 0;
+    for (ssize_t value_idx = sizeof(T) - 1; value_idx >= 0; --value_idx)
     {
         size_t const bytes_idx = value_idx;
         value <<= 8;
@@ -107,6 +143,46 @@ inline T from_little_endian(uint8_t * bytes)
     }
     return value;
 }
+
+template <typename T>
+requires std::signed_integral<T>
+inline T from_little_endian(uint8_t const * const bytes)
+{
+    using UT = WidthMatch<T>::u;
+    UT const twos_complement = from_little_endian<UT>(bytes);
+    if (twos_complement > std::numeric_limits<T>::max())
+    {
+        UT const u_absolute_value = (~twos_complement) + 1;
+        T const s_absolute_value = u_absolute_value;
+        return -s_absolute_value;
+    }
+    T value = twos_complement;
+    return value;
+}
+
+template <size_t buffer_size, size_t idx = 0>
+requires (idx <= buffer_size)
+class Unpack
+{
+public:
+    inline Unpack(uint8_t const * const buffer): _buffer(buffer) {}
+
+    void constexpr finalize()
+    {
+        static_assert(idx == buffer_size);
+    }
+
+    template <typename T>
+    requires std::integral<T>
+    inline auto operator>>(T & value)
+    {
+        value = from_little_endian<T>(_buffer + idx);
+        return Unpack<buffer_size, idx + sizeof(T)>(_buffer);
+    }
+
+private:
+    uint8_t const * const _buffer;
+};
 
 //class ScopedDisableInterrupts
 //{
@@ -187,7 +263,11 @@ public:
         return _initialized_successfully;
     }
 
+    void update();
+
 private:
+    void _service_uart();
+
     bool _initialized_successfully = false;
 
     uart_inst_t * const _uart_id;
@@ -356,6 +436,7 @@ bool GpsUBlox::_send_ubx_cfg(uint8_t const msg_id,
         absolute_time_t const timeout_time = make_timeout_time_ms(1200);
         while (absolute_time_diff_us(get_absolute_time(), timeout_time) > 0)
         {
+            _service_uart();
             if (_read_ubx(&rx_msg_class, &rx_msg_id, &rx_msg_len, rx_msg, sizeof(rx_msg)))
             {
                 if (rx_msg_class != 0x05)
@@ -425,6 +506,14 @@ bool GpsUBlox::_send_ubx_cfg_msg(uint8_t const msg_class,
     return _send_ubx_cfg(0x01, sizeof(ubx_cfg_prt_msg), ubx_cfg_prt_msg);
 }
 
+void GpsUBlox::_service_uart()
+{
+    while (uart_is_readable(_uart_id) && !_rx_buf.full())
+    {
+        _rx_buf.push(uart_getc(_uart_id));
+    }
+}
+
 bool GpsUBlox::_read_ubx(uint8_t * msg_class,
                          uint8_t * msg_id,
                          uint16_t * msg_len,
@@ -433,10 +522,6 @@ bool GpsUBlox::_read_ubx(uint8_t * msg_class,
 {
     uint8_t actual_a;
     uint8_t actual_b;
-    while (uart_is_readable(_uart_id) && !_rx_buf.full())
-    {
-        _rx_buf.push(uart_getc(_uart_id));
-    }
     while (!_rx_buf.empty())
     {
         size_t constexpr zero_payload_packet_length = 8;
@@ -500,6 +585,105 @@ bool GpsUBlox::_read_ubx(uint8_t * msg_class,
     return false;
 }
 
+void GpsUBlox::update()
+{
+    uint8_t rx_msg_class;
+    uint8_t rx_msg_id;
+    uint16_t rx_msg_len;
+    uint8_t rx_msg[92];
+
+    _service_uart();
+
+    while (_read_ubx(&rx_msg_class, &rx_msg_id, &rx_msg_len, rx_msg, sizeof(rx_msg)))
+    {
+        if (rx_msg_class == 0x01) // UBX-NAV
+        {
+            if (rx_msg_id == 0x07) // UBX-NAV-PVT
+            {
+                constexpr size_t len = 92;
+                if (rx_msg_len != len)
+                {
+                    continue;
+                }
+                uint32_t iTOW;
+                uint16_t year;
+                uint8_t month;
+                uint8_t day;
+                uint8_t hour;
+                uint8_t min;
+                uint8_t sec;
+                uint8_t valid;
+                uint32_t tAcc;
+                int32_t nano;
+                uint8_t fixType;
+                uint8_t flags;
+                uint8_t flags2;
+                uint8_t numSV;
+                int32_t lon;
+                int32_t lat;
+                int32_t height;
+                int32_t hMSL;
+                uint32_t hAcc;
+                uint32_t vAcc;
+                int32_t velN;
+                int32_t velE;
+                int32_t velD;
+                int32_t gSpeed;
+                int32_t headMot;
+                uint32_t sAcc;
+                uint32_t headAcc;
+                uint16_t pDOP;
+                uint16_t flags3;
+                int32_t headVeh;
+                int16_t magDec;
+                uint16_t magAcc;
+
+                uint8_t reserved;
+
+                (Unpack<len>(rx_msg)
+                    >> iTOW
+                    >> year
+                    >> month
+                    >> day
+                    >> hour
+                    >> min
+                    >> sec
+                    >> valid
+                    >> tAcc
+                    >> nano
+                    >> fixType
+                    >> flags
+                    >> flags2
+                    >> numSV
+                    >> lon
+                    >> lat
+                    >> height
+                    >> hMSL
+                    >> hAcc
+                    >> vAcc
+                    >> velN
+                    >> velE
+                    >> velD
+                    >> gSpeed
+                    >> headMot
+                    >> sAcc
+                    >> headAcc
+                    >> pDOP
+                    >> flags3
+                    >> reserved
+                    >> reserved
+                    >> reserved
+                    >> reserved
+                    >> headVeh
+                    >> magDec
+                    >> magAcc).finalize();
+
+                printf("%d/%d/%d %d:%d:%d.%09ld - %ld, %ld - %d sats\n", year, month, day, hour, min, sec, nano, lat, lon, numSV);
+            }
+        }
+    }
+}
+
 void GpsUBlox::_handle_interrupt()
 {
     ++_interrupt_count;
@@ -535,6 +719,6 @@ int main()
 
     while (true)
     {
-        //printf("%c", gps->getc());
+        gps->update();
     }
 }
