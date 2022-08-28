@@ -585,6 +585,11 @@ bool GpsUBlox::_read_ubx(uint8_t * msg_class,
     return false;
 }
 
+namespace
+{
+    int32_t constexpr billion = 1000 * 1000 * 1000;
+}
+
 void GpsUBlox::update()
 {
     uint8_t rx_msg_class;
@@ -678,7 +683,13 @@ void GpsUBlox::update()
                     >> magDec
                     >> magAcc).finalize();
 
-                printf("%d/%d/%d %d:%d:%d.%09ld - %ld, %ld - %d sats\n", year, month, day, hour, min, sec, nano, lat, lon, numSV);
+                if (nano < 0)
+                {
+                    sec -= 1;
+                    nano += billion;
+                }
+
+                printf("%02d-%02d-%02d %02d:%02d:%02d.%03ld %03ld %03ld +/- %ld ns      %ld.%07ld, %ld.%07ld - %d sats\n", year, month, day, hour, min, sec, nano/1000000, nano/1000%1000, nano%1000, tAcc, lat/10000000, labs(lat)%10000000, lon/10000000, labs(lon)%10000000, numSV);
             }
         }
     }
