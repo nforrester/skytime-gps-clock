@@ -5,8 +5,16 @@
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include "hardware/uart.h"
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wvolatile"
+#include "hardware/pio.h"
+#pragma GCC diagnostic pop
+
 #include "pico/binary_info.h"
 #include "pico/multicore.h"
+
+#include "pps.pio.h"
 
 class GpioOut
 {
@@ -63,20 +71,77 @@ private:
     uint const _pin;
 };
 
-std::unique_ptr<GpioIn> pps;
+class Pps
+{
+public:
+    Pps(PIO pio, uint const pin): _pio(pio)
+    {
+        uint offset = pio_add_program(_pio, &pps_program);
+        _sm = pio_claim_unused_sm(_pio, true);
+        pps_program_init(_pio, _sm, offset, pin);
+    }
 
-//void core1_main()
-//{
-//    int32_t p = 0;
-//    led->on();
-//    while (true)
-//    {
-//        while (p == global_interrupt_count) {}
-//        led->off();
-//        while (p == global_interrupt_count) {}
-//        led->on();
-//    }
-//}
+    void update()
+    {
+        while (!pio_sm_is_rx_fifo_empty(_pio, _sm))
+        {
+            _possible_overflows += pio_sm_is_rx_fifo_full(_pio, _sm);
+            uint32_t const rxdata = pio_sm_get(_pio, _sm);
+            bool const status = rxdata & 0x00000001;
+            if (status && !_last_status)
+            {
+                uint32_t const posedge = rxdata ^ (rxdata >> 1);
+                uint8_t subtime = 0;
+                subtime |= (posedge & ~0xffff0000) ? 0x10 : 0x00;
+                subtime |= (posedge & ~0xff00ff00) ? 0x08 : 0x00;
+                subtime |= (posedge & ~0xf0f0f0f0) ? 0x04 : 0x00;
+                subtime |= (posedge & ~0xcccccccc) ? 0x02 : 0x00;
+                subtime |= (posedge & ~0xaaaaaaaa) ? 0x01 : 0x00;
+
+                _cycles_since_last_pulse += subtime;
+                _cycles_in_last_second = _cycles_since_last_pulse;
+                ++_completed_seconds;
+                _cycles_since_last_pulse = 32 - subtime;
+            }
+            else
+            {
+                _cycles_since_last_pulse += 32;
+            }
+            _last_status = status;
+        }
+
+        _completed_seconds_main_thread_a = _completed_seconds;
+        _cycles_in_last_second_main_thread = _cycles_in_last_second;
+        _possible_overflows_main_thread = _possible_overflows;
+        _completed_seconds_main_thread_b = _completed_seconds;
+    }
+
+    void get_status(uint32_t * completed_seconds, uint32_t * cycles_in_last_second, uint32_t * possible_overflows)
+    {
+        do
+        {
+            *completed_seconds = _completed_seconds_main_thread_a;
+            *cycles_in_last_second = _cycles_in_last_second_main_thread;
+            *possible_overflows = _possible_overflows_main_thread;
+        } while (*completed_seconds != _completed_seconds_main_thread_b);
+    }
+
+private:
+    PIO _pio;
+    uint _sm;
+    bool _last_status = false;
+    uint32_t _cycles_since_last_pulse = 0;
+    uint32_t _cycles_in_last_second = 0;
+    uint32_t _completed_seconds = 0;
+    uint32_t _possible_overflows = 0;
+
+    uint32_t volatile _completed_seconds_main_thread_a = 0;
+    uint32_t volatile _cycles_in_last_second_main_thread = 0;
+    uint32_t volatile _possible_overflows_main_thread = 0;
+    uint32_t volatile _completed_seconds_main_thread_b = 0;
+};
+
+std::unique_ptr<Pps> pps;
 
 template <typename T>
 requires std::unsigned_integral<T>
@@ -722,9 +787,12 @@ void GpsUBlox::update()
 
                 bool const invalidLlh = flags3 & 0x0001;
                 uint8_t const lastCorrectionAge = (flags3 >> 1) & 0x000f;
+
+                int32_t pps_error_ns = nano;
                 #pragma GCC diagnostic pop
 
                 bool const time_ok = validDate && validTime && fullyResolved && gnssFixOK;
+
 
                 if (nano < 0)
                 {
@@ -840,6 +908,14 @@ void GpsUBlox::_handle_interrupt()
     }
 }
 
+void core1_main()
+{
+    while (true)
+    {
+        pps->update();
+    }
+}
+
 int main()
 {
     bi_decl(bi_program_description("GPS Clock"));
@@ -857,7 +933,7 @@ int main()
 
     uint constexpr pps_pin = 18;
     bi_decl(bi_1pin_with_name(pps_pin, "PPS"));
-    pps = std::make_unique<GpioIn>(pps_pin);
+    pps = std::make_unique<Pps>(pio0, pps_pin);
     printf("PPS init complete.\n");
 
     uint constexpr gps_tx_pin = 16;
@@ -876,18 +952,18 @@ int main()
         printf("GPS init FAILED.\n");
     }
 
-    //multicore_launch_core1(core1_main);
+    multicore_launch_core1(core1_main);
 
-    bool prev_pps = pps->get();
-    bool this_pps;
+    uint32_t prev_completed_seconds = 0;
     while (true)
     {
-        this_pps = pps->get();
-        if (this_pps && !prev_pps)
+        uint32_t completed_seconds, cycles_in_last_second, possible_overflows;
+        pps->get_status(&completed_seconds, &cycles_in_last_second, &possible_overflows);
+        if (completed_seconds != prev_completed_seconds)
         {
-            printf("PPS pulse\n");
+            printf("PPS: %ld %ld %ld\n", completed_seconds, cycles_in_last_second, possible_overflows);
+            prev_completed_seconds = completed_seconds;
         }
-        prev_pps = this_pps;
 
         gps->update();
     }

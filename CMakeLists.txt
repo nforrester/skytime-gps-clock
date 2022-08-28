@@ -17,4 +17,6 @@ pico_enable_stdio_uart(gps_clock 0)
 
 pico_add_extra_outputs(gps_clock)
 
-target_link_libraries(gps_clock pico_stdlib hardware_uart pico_multicore)
+pico_generate_pio_header(gps_clock ${CMAKE_CURRENT_LIST_DIR}/pps.pio)
+
+target_link_libraries(gps_clock pico_stdlib hardware_uart pico_multicore hardware_pio)
