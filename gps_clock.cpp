@@ -8,12 +8,11 @@
 #include "pico/binary_info.h"
 #include "pico/multicore.h"
 
-class Led
+class GpioOut
 {
 public:
-    Led(uint const pin): _pin(pin)
+    GpioOut(uint const pin): _pin(pin)
     {
-        bi_decl(bi_1pin_with_name(_pin, "LED"));
         gpio_init(_pin);
         gpio_set_dir(_pin, GPIO_OUT);
     }
@@ -44,7 +43,27 @@ private:
     bool _state = false;
 };
 
-std::unique_ptr<Led> led;
+std::unique_ptr<GpioOut> led;
+
+class GpioIn
+{
+public:
+    GpioIn(uint const pin): _pin(pin)
+    {
+        gpio_init(_pin);
+        gpio_set_dir(_pin, GPIO_IN);
+    }
+
+    bool get()
+    {
+        return gpio_get(_pin);
+    }
+
+private:
+    uint const _pin;
+};
+
+std::unique_ptr<GpioIn> pps;
 
 //void core1_main()
 //{
@@ -321,6 +340,8 @@ private:
 
     static uint8_t constexpr _sync1 = 181;
     static uint8_t constexpr _sync2 = 98;
+
+    bool _last_ubx_nav_pvt_reported_leap_second = false;
 };
 
 std::unique_ptr<GpsUBlox> gps;
@@ -336,9 +357,6 @@ GpsUBlox::GpsUBlox(uart_inst_t * const uart_id, uint const tx_pin, uint const rx
 {
     uint32_t constexpr baud_rate = 9600;
 
-    bi_decl(bi_1pin_with_name(tx_pin, "GPS UART Tx"));
-    bi_decl(bi_1pin_with_name(rx_pin, "GPS UART Rx"));
-    bi_decl(bi_1pin_with_func(tx_pin, GPIO_FUNC_UART));
     uart_init(_uart_id, baud_rate);
     gpio_set_function(tx_pin, GPIO_FUNC_UART);
     gpio_set_function(rx_pin, GPIO_FUNC_UART);
@@ -683,13 +701,131 @@ void GpsUBlox::update()
                     >> magDec
                     >> magAcc).finalize();
 
+                bool const this_message_reported_leap_second = sec == 60;
+
+                #pragma GCC diagnostic push
+                #pragma GCC diagnostic ignored "-Wunused-variable"
+                bool const validDate =     valid & 0x01;
+                bool const validTime =     valid & 0x02;
+                bool const fullyResolved = valid & 0x04;
+                bool const validMag =      valid & 0x08;
+
+                bool const gnssFixOK =    flags & 0x01;
+                bool const diffSoln =     flags & 0x02;
+                uint8_t const psmState = (flags >> 2) && 0x07;
+                bool const headVehValid = flags & 0x20;
+                uint8_t const carrSoln = (flags >> 6) && 0x03;
+
+                bool const confirmedAvai = flags2 & 0x20;
+                bool const confirmedDate = flags2 & 0x40;
+                bool const confirmedTime = flags2 & 0x80;
+
+                bool const invalidLlh = flags3 & 0x0001;
+                uint8_t const lastCorrectionAge = (flags3 >> 1) & 0x000f;
+                #pragma GCC diagnostic pop
+
+                bool const time_ok = validDate && validTime && fullyResolved && gnssFixOK;
+
                 if (nano < 0)
                 {
-                    sec -= 1;
                     nano += billion;
+                    if (sec > 0)
+                    {
+                        sec -= 1;
+                    }
+                    else
+                    {
+                        if (_last_ubx_nav_pvt_reported_leap_second)
+                        {
+                            sec = 60;
+                        }
+                        else
+                        {
+                            sec = 59;
+                        }
+                        if (min > 0)
+                        {
+                            min -= 1;
+                        }
+                        else
+                        {
+                            min = 59;
+                            if (hour > 0)
+                            {
+                                hour -= 1;
+                            }
+                            else
+                            {
+                                hour = 23;
+                                if (day > 1)
+                                {
+                                    day -= 1;
+                                }
+                                else
+                                {
+                                    switch (month - 1)
+                                    {
+                                        case 1:
+                                        case 3:
+                                        case 5:
+                                        case 7:
+                                        case 8:
+                                        case 10:
+                                        case 0:
+                                            day = 31;
+                                            break;
+
+                                        case 4:
+                                        case 6:
+                                        case 9:
+                                        case 11:
+                                            day = 30;
+                                            break;
+
+                                        case 2:
+                                            if (year % 4 == 0)
+                                            {
+                                                if (year % 100 == 0)
+                                                {
+                                                    if (year % 400 == 0)
+                                                    {
+                                                        day = 29;
+                                                    }
+                                                    else
+                                                    {
+                                                        day = 28;
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    day = 29;
+                                                }
+                                            }
+                                            else
+                                            {
+                                                day = 28;
+                                            }
+                                            break;
+                                    }
+
+                                    if (month > 1)
+                                    {
+                                        month -= 1;
+                                    }
+                                    else
+                                    {
+                                        month = 12;
+                                        year -= 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
-                printf("%02d-%02d-%02d %02d:%02d:%02d.%03ld %03ld %03ld +/- %ld ns      %ld.%07ld, %ld.%07ld - %d sats\n", year, month, day, hour, min, sec, nano/1000000, nano/1000%1000, nano%1000, tAcc, lat/10000000, labs(lat)%10000000, lon/10000000, labs(lon)%10000000, numSV);
+                printf("%02d-%02d-%02d %02d:%02d:%02d.%03ld %03ld %03ld +/- %5ld ns    (%s)      %ld.%07ld, %ld.%07ld - %d sats\n", year, month, day, hour, min, sec, nano/1000000, nano/1000%1000, nano%1000, tAcc, time_ok ? " valid " : "INVALID", lat/10000000, labs(lat)%10000000, lon/10000000, labs(lon)%10000000, numSV);
+
+                _last_ubx_nav_pvt_reported_leap_second = this_message_reported_leap_second;
             }
         }
     }
@@ -714,9 +850,23 @@ int main()
     sleep_ms(1000);
     printf("Go!\n");
 
-    led = std::make_unique<Led>(25);
+    uint constexpr led_pin = 25;
+    bi_decl(bi_1pin_with_name(led_pin, "LED"));
+    led = std::make_unique<GpioOut>(led_pin);
     printf("LED init complete.\n");
-    gps = std::make_unique<GpsUBlox>(uart0, 16, 17);
+
+    uint constexpr pps_pin = 18;
+    bi_decl(bi_1pin_with_name(pps_pin, "PPS"));
+    pps = std::make_unique<GpioIn>(pps_pin);
+    printf("PPS init complete.\n");
+
+    uint constexpr gps_tx_pin = 16;
+    uint constexpr gps_rx_pin = 17;
+    bi_decl(bi_1pin_with_name(gps_tx_pin, "GPS"));
+    bi_decl(bi_1pin_with_func(gps_tx_pin, GPIO_FUNC_UART));
+    bi_decl(bi_1pin_with_name(gps_rx_pin, "GPS"));
+    bi_decl(bi_1pin_with_func(gps_rx_pin, GPIO_FUNC_UART));
+    gps = std::make_unique<GpsUBlox>(uart0, gps_tx_pin, gps_rx_pin);
     if (gps->initialized_successfully())
     {
         printf("GPS init complete.\n");
@@ -728,8 +878,17 @@ int main()
 
     //multicore_launch_core1(core1_main);
 
+    bool prev_pps = pps->get();
+    bool this_pps;
     while (true)
     {
+        this_pps = pps->get();
+        if (this_pps && !prev_pps)
+        {
+            printf("PPS pulse\n");
+        }
+        prev_pps = this_pps;
+
         gps->update();
     }
 }
