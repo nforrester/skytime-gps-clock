@@ -83,61 +83,34 @@ public:
 
     void update()
     {
-        while (!pio_sm_is_rx_fifo_empty(_pio, _sm))
+        if (pps_program_second_completed(_pio, _sm))
         {
-            _possible_overflows += pio_sm_is_rx_fifo_full(_pio, _sm);
-            uint32_t const rxdata = pio_sm_get(_pio, _sm);
-            bool const status = rxdata & 0x00000001;
-            if (status && !_last_status)
-            {
-                uint32_t const posedge = rxdata ^ (rxdata >> 1);
-                uint8_t subtime = 0;
-                subtime |= (posedge & ~0xffff0000) ? 0x10 : 0x00;
-                subtime |= (posedge & ~0xff00ff00) ? 0x08 : 0x00;
-                subtime |= (posedge & ~0xf0f0f0f0) ? 0x04 : 0x00;
-                subtime |= (posedge & ~0xcccccccc) ? 0x02 : 0x00;
-                subtime |= (posedge & ~0xaaaaaaaa) ? 0x01 : 0x00;
-
-                _cycles_since_last_pulse += subtime;
-                _cycles_in_last_second = _cycles_since_last_pulse;
-                ++_completed_seconds;
-                _cycles_since_last_pulse = 32 - subtime;
-            }
-            else
-            {
-                _cycles_since_last_pulse += 32;
-            }
-            _last_status = status;
+            _bicycles_in_last_second = pps_program_get_bicycles_in_last_complete_second(_pio, _sm);
+            ++_completed_seconds;
         }
 
         _completed_seconds_main_thread_a = _completed_seconds;
-        _cycles_in_last_second_main_thread = _cycles_in_last_second;
-        _possible_overflows_main_thread = _possible_overflows;
+        _bicycles_in_last_second_main_thread = _bicycles_in_last_second;
         _completed_seconds_main_thread_b = _completed_seconds;
     }
 
-    void get_status(uint32_t * completed_seconds, uint32_t * cycles_in_last_second, uint32_t * possible_overflows)
+    void get_status(uint32_t * completed_seconds, uint32_t * bicycles_in_last_second)
     {
         do
         {
             *completed_seconds = _completed_seconds_main_thread_a;
-            *cycles_in_last_second = _cycles_in_last_second_main_thread;
-            *possible_overflows = _possible_overflows_main_thread;
+            *bicycles_in_last_second = _bicycles_in_last_second_main_thread;
         } while (*completed_seconds != _completed_seconds_main_thread_b);
     }
 
 private:
     PIO _pio;
     uint _sm;
-    bool _last_status = false;
-    uint32_t _cycles_since_last_pulse = 0;
-    uint32_t _cycles_in_last_second = 0;
+    uint32_t _bicycles_in_last_second = 0;
     uint32_t _completed_seconds = 0;
-    uint32_t _possible_overflows = 0;
 
     uint32_t volatile _completed_seconds_main_thread_a = 0;
-    uint32_t volatile _cycles_in_last_second_main_thread = 0;
-    uint32_t volatile _possible_overflows_main_thread = 0;
+    uint32_t volatile _bicycles_in_last_second_main_thread = 0;
     uint32_t volatile _completed_seconds_main_thread_b = 0;
 };
 
@@ -446,7 +419,12 @@ GpsUBlox::GpsUBlox(uart_inst_t * const uart_id, uint const tx_pin, uint const rx
         return;
     }
 
-    if (!_send_ubx_cfg_msg(0x01, 0x07, 1))
+    if (!_send_ubx_cfg_msg(0x01, 0x07, 0))
+    {
+        return;
+    }
+
+    if (!_send_ubx_cfg_msg(0x01, 0x20, 1))
     {
         return;
     }
@@ -891,9 +869,39 @@ void GpsUBlox::update()
                     }
                 }
 
-                printf("%02d-%02d-%02d %02d:%02d:%02d.%03ld %03ld %03ld +/- %5ld ns    (%s)      %ld.%07ld, %ld.%07ld - %d sats\n", year, month, day, hour, min, sec, nano/1000000, nano/1000%1000, nano%1000, tAcc, time_ok ? " valid " : "INVALID", lat/10000000, labs(lat)%10000000, lon/10000000, labs(lon)%10000000, numSV);
+                printf("PVT     %02d-%02d-%02d %02d:%02d:%02d.%03ld %03ld %03ld +/- %5ld ns    (%s)      %ld.%07ld, %ld.%07ld - %d sats\n", year, month, day, hour, min, sec, nano/1000000, nano/1000%1000, nano%1000, tAcc, time_ok ? " valid " : "INVALID", lat/10000000, labs(lat)%10000000, lon/10000000, labs(lon)%10000000, numSV);
 
                 _last_ubx_nav_pvt_reported_leap_second = this_message_reported_leap_second;
+            }
+            else if (rx_msg_id == 0x20) // UBX-NAV-TIMEGPS
+            {
+                constexpr size_t len = 16;
+                if (rx_msg_len != len)
+                {
+                    continue;
+                }
+                uint32_t iTOW;
+                int32_t fTOW;
+                int16_t week;
+                int8_t leapS;
+                uint8_t valid;
+                uint32_t tAcc;
+
+                (Unpack<len>(rx_msg)
+                    >> iTOW
+                    >> fTOW
+                    >> week
+                    >> leapS
+                    >> valid
+                    >> tAcc).finalize();
+
+                bool const towValid   = valid & 0x01;
+                bool const weekValid  = valid & 0x02;
+                bool const leapSValid = valid & 0x04;
+
+                bool const time_ok = towValid && weekValid && leapSValid;
+
+                printf("TIMEGPS %d %ld %ld +/- %ld : %d (%s)\n", week, iTOW, fTOW, tAcc, leapS, time_ok ? " valid " : "INVALID");
             }
         }
     }
@@ -957,11 +965,11 @@ int main()
     uint32_t prev_completed_seconds = 0;
     while (true)
     {
-        uint32_t completed_seconds, cycles_in_last_second, possible_overflows;
-        pps->get_status(&completed_seconds, &cycles_in_last_second, &possible_overflows);
+        uint32_t completed_seconds, bicycles_in_last_second;
+        pps->get_status(&completed_seconds, &bicycles_in_last_second);
         if (completed_seconds != prev_completed_seconds)
         {
-            printf("PPS: %ld %ld %ld\n", completed_seconds, cycles_in_last_second, possible_overflows);
+            printf("PPS: %ld %ld\n", completed_seconds, 2 * bicycles_in_last_second);
             prev_completed_seconds = completed_seconds;
         }
 

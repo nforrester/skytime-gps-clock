@@ -1,28 +1,79 @@
 .program pps
 
-; Read a GPS Pulse Per Second line
+// Count bicycles (pairs of cycles, because we just can't manage to count individual cycles)
+// between rising edges on a GPS Pulse Per Second line.
 
-; must be run with autopush
+end_second:
+    mov isr, x        // Move the counted-down X to the ISR...
+    push noblock      // and then back to the host so that it can know how long we took.
+begin_second:
+    pull noblock      // Host needs to supply pps_program_initial_count_actual() to the TX FIFO at least once per second.
+    mov x, osr        // Move pps_program_initial_count_actual() into X, so that we can count down from it.
 
+count_while_high:
+    jmp x-- check_for_low
+check_for_low:
+    jmp pin count_while_high
+
+count_while_low:
 .wrap_target
-    in pins 1
+    jmp x-- check_for_high
+check_for_high:
+    jmp pin end_second
 .wrap
 
+
+
+
+
 % c-sdk {
+// Do your subtraction from this, but...
+static inline constexpr uint32_t pps_program_initial_count_effective()
+{
+    return std::numeric_limits<uint32_t>::max();
+}
+
+// Actually initialize the counter with this, because of two extra bicycles between seconds.
+static inline constexpr uint32_t pps_program_initial_count_actual()
+{
+    return pps_program_initial_count_effective() - 2;
+}
+
 static inline void pps_program_init(PIO pio, uint sm, uint offset, uint pps_pin) {
     pio_sm_config c = pps_program_get_default_config(offset);
 
-    sm_config_set_in_pins(&c, pps_pin);
+    sm_config_set_jmp_pin(&c, pps_pin);
     pio_sm_set_consecutive_pindirs(pio, sm, pps_pin, 1, false);
     pio_gpio_init(pio, pps_pin);
 
-    sm_config_set_in_shift(&c, false, true, 32);
+    sm_config_set_in_shift(&c, false, false, 32);
 
-    // We only receive, so disable the TX FIFO to make the RX FIFO deeper.
-    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
-
-    // Load our configuration, and start the program from the beginning
+    // Load our configuration
     pio_sm_init(pio, sm, offset, &c);
+
+    // Insert the initial counter value
+    pio_sm_put(pio, sm, pps_program_initial_count_actual());
+
+    // Insert the a counter value for the next second
+    pio_sm_put(pio, sm, pps_program_initial_count_actual());
+
+    // Start the program from the beginning
     pio_sm_set_enabled(pio, sm, true);
+
+    // Discard the initial junk output
+    pio_sm_get_blocking(pio, sm);
+}
+
+static inline bool pps_program_second_completed(PIO pio, uint sm)
+{
+    return !pio_sm_is_rx_fifo_empty(pio, sm);
+}
+
+static inline uint32_t pps_program_get_bicycles_in_last_complete_second(PIO pio, uint sm)
+{
+    // Recharge the counter
+    pio_sm_put(pio, sm, pps_program_initial_count_actual());
+
+    return pps_program_initial_count_effective() - pio_sm_get(pio, sm);
 }
 %}
