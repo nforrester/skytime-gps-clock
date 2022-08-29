@@ -116,42 +116,6 @@ private:
 
 std::unique_ptr<Pps> pps;
 
-template <typename T>
-requires std::unsigned_integral<T>
-inline void to_big_endian(uint8_t * bytes, T value)
-{
-    for (size_t bytes_idx = 0; bytes_idx < sizeof(T); ++bytes_idx)
-    {
-        size_t const value_idx = sizeof(T) - bytes_idx - 1;
-        bytes[bytes_idx] = (value >> (value_idx * 8)) & 0xff;
-    }
-}
-
-template <typename T>
-requires std::unsigned_integral<T>
-inline void to_little_endian(uint8_t * bytes, T value)
-{
-    for (size_t bytes_idx = 0; bytes_idx < sizeof(T); ++bytes_idx)
-    {
-        size_t const value_idx = bytes_idx;
-        bytes[bytes_idx] = (value >> (value_idx * 8)) & 0xff;
-    }
-}
-
-template <typename T>
-requires std::unsigned_integral<T>
-inline T from_big_endian(uint8_t * bytes)
-{
-    T value = 0;
-    for (ssize_t value_idx = sizeof(T) - 1; value_idx >= 0; --value_idx)
-    {
-        size_t const bytes_idx = sizeof(T) - value_idx - 1;
-        value <<= 8;
-        value |= bytes[bytes_idx];
-    }
-    return value;
-}
-
 template <typename T, size_t size>
 concept IsWidth = sizeof(T) == size;
 
@@ -187,6 +151,92 @@ public:
     using s = int8_t;
 };
 
+template <typename U, typename S>
+requires std::same_as<U, typename WidthMatch<S>::u>
+inline constexpr S signed_from_unsigned_twos_complement(U twos_complement)
+{
+    if (twos_complement > std::numeric_limits<S>::max())
+    {
+        U const u_absolute_value = (~twos_complement) + 1;
+        if (u_absolute_value > std::numeric_limits<S>::max())
+        {
+            return std::numeric_limits<S>::lowest();
+        }
+        S const s_absolute_value = u_absolute_value;
+        return -s_absolute_value;
+    }
+    S value = twos_complement;
+    return value;
+}
+
+template <typename U, typename S>
+requires std::same_as<U, typename WidthMatch<S>::u>
+inline constexpr U unsigned_twos_complement_from_signed(S value)
+{
+    U const twos_complement = value;
+    return twos_complement;
+}
+
+template <typename T>
+requires std::unsigned_integral<T>
+inline void to_big_endian(uint8_t * bytes, T value)
+{
+    for (size_t bytes_idx = 0; bytes_idx < sizeof(T); ++bytes_idx)
+    {
+        size_t const value_idx = sizeof(T) - bytes_idx - 1;
+        bytes[bytes_idx] = (value >> (value_idx * 8)) & 0xff;
+    }
+}
+
+template <typename T>
+requires std::signed_integral<T>
+inline void to_big_endian(uint8_t * bytes, T value)
+{
+    using UT = WidthMatch<T>::u;
+    to_big_endian(bytes, unsigned_twos_complement_from_signed<UT, T>(value));
+}
+
+template <typename T>
+requires std::unsigned_integral<T>
+inline T from_big_endian(uint8_t * bytes)
+{
+    T value = 0;
+    for (ssize_t value_idx = sizeof(T) - 1; value_idx >= 0; --value_idx)
+    {
+        size_t const bytes_idx = sizeof(T) - value_idx - 1;
+        value <<= 8;
+        value |= bytes[bytes_idx];
+    }
+    return value;
+}
+
+template <typename T>
+requires std::signed_integral<T>
+inline T from_big_endian(uint8_t const * const bytes)
+{
+    using UT = WidthMatch<T>::u;
+    return signed_from_unsigned_twos_complement<UT, T>(from_big_endian<UT>(bytes));
+}
+
+template <typename T>
+requires std::unsigned_integral<T>
+inline void to_little_endian(uint8_t * bytes, T value)
+{
+    for (size_t bytes_idx = 0; bytes_idx < sizeof(T); ++bytes_idx)
+    {
+        size_t const value_idx = bytes_idx;
+        bytes[bytes_idx] = (value >> (value_idx * 8)) & 0xff;
+    }
+}
+
+template <typename T>
+requires std::signed_integral<T>
+inline void to_little_endian(uint8_t * bytes, T value)
+{
+    using UT = WidthMatch<T>::u;
+    to_little_endian(bytes, unsigned_twos_complement_from_signed<UT, T>(value));
+}
+
 template <typename T>
 requires std::unsigned_integral<T>
 inline T from_little_endian(uint8_t const * const bytes)
@@ -206,16 +256,32 @@ requires std::signed_integral<T>
 inline T from_little_endian(uint8_t const * const bytes)
 {
     using UT = WidthMatch<T>::u;
-    UT const twos_complement = from_little_endian<UT>(bytes);
-    if (twos_complement > std::numeric_limits<T>::max())
-    {
-        UT const u_absolute_value = (~twos_complement) + 1;
-        T const s_absolute_value = u_absolute_value;
-        return -s_absolute_value;
-    }
-    T value = twos_complement;
-    return value;
+    return signed_from_unsigned_twos_complement<UT, T>(from_little_endian<UT>(bytes));
 }
+
+template <size_t buffer_size, size_t idx = 0>
+requires (idx <= buffer_size)
+class Pack
+{
+public:
+    inline Pack(uint8_t * const buffer): _buffer(buffer) {}
+
+    void constexpr finalize()
+    {
+        static_assert(idx == buffer_size);
+    }
+
+    template <typename T>
+    requires std::integral<T>
+    inline auto operator<<(T value)
+    {
+        to_little_endian<T>(_buffer + idx, value);
+        return Pack<buffer_size, idx + sizeof(T)>(_buffer);
+    }
+
+private:
+    uint8_t * const _buffer;
+};
 
 template <size_t buffer_size, size_t idx = 0>
 requires (idx <= buffer_size)
@@ -365,6 +431,24 @@ private:
                            uint8_t const msg_id,
                            uint8_t const rate);
 
+    bool _send_ubx_cfg_tp5(uint8_t const tpIdx,
+                           int16_t const antCableDelay,
+                           int16_t const rfGroupDelay,
+                           uint32_t const freqPeriod,
+                           uint32_t const freqPeriodLock,
+                           uint32_t const pulseLenRatio,
+                           uint32_t const pulseLenRatioLock,
+                           int32_t const userConfigDelay,
+                           bool active,
+                           bool lockGnssFreq,
+                           bool lockedOtherSet,
+                           bool isFreq,
+                           bool isLength,
+                           bool alignToTow,
+                           bool polarity,
+                           uint8_t gridUtcGnss,
+                           uint8_t syncMode);
+
     bool _read_ubx(uint8_t * msg_class,
                    uint8_t * msg_id,
                    uint16_t * msg_len,
@@ -419,6 +503,11 @@ GpsUBlox::GpsUBlox(uart_inst_t * const uart_id, uint const tx_pin, uint const rx
         return;
     }
 
+    if (!_send_ubx_cfg_tp5(0, 0, 0, 1, 1, 100000, 100000, 0, true, true, false, true, true, true, true, 1, true))
+    {
+        return;
+    }
+
     if (!_send_ubx_cfg_msg(0x01, 0x07, 0))
     {
         return;
@@ -461,17 +550,19 @@ void GpsUBlox::_send_ubx(uint8_t const msg_class,
                          uint8_t const * const msg)
 {
     uint8_t header[6];
-    header[0] = _sync1;
-    header[1] = _sync2;
-    header[2] = msg_class;
-    header[3] = msg_id;
-    to_little_endian<uint16_t>(header + 4, msg_len);
+    (Pack<sizeof(header)>(header)
+        << _sync1
+        << _sync2
+        << msg_class
+        << msg_id
+        << msg_len).finalize();
 
     Checksum ck;
     ck(msg_class, msg_id, msg_len, msg);
     uint8_t footer[2];
-    footer[0] = ck.a;
-    footer[1] = ck.b;
+    (Pack<sizeof(footer)>(footer)
+        << ck.a
+        << ck.b).finalize();
 
     uart_write_blocking(_uart_id, header, sizeof(header));
     uart_write_blocking(_uart_id, msg, msg_len);
@@ -527,6 +618,7 @@ bool GpsUBlox::_send_ubx_cfg(uint8_t const msg_id,
                     return true;
                 }
                 // We got a NAK. Just wait for the timeout to expire before trying again.
+                printf("NAK %02x %02x\n", acked_class, acked_id);
                 continue;
             }
         }
@@ -542,17 +634,19 @@ bool GpsUBlox::_send_ubx_cfg_prt(uint8_t const port_id,
                                  uint16_t const out_proto_mask,
                                  uint16_t const flags)
 {
+    uint8_t constexpr reserved = 0;
     uint8_t ubx_cfg_prt_msg[20];
-    to_little_endian<uint8_t>(ubx_cfg_prt_msg + 0, port_id);
-    to_little_endian<uint8_t>(ubx_cfg_prt_msg + 1, 0);
-    to_little_endian<uint16_t>(ubx_cfg_prt_msg + 2, tx_ready);
-    to_little_endian<uint32_t>(ubx_cfg_prt_msg + 4, mode);
-    to_little_endian<uint32_t>(ubx_cfg_prt_msg + 8, baud_rate);
-    to_little_endian<uint16_t>(ubx_cfg_prt_msg + 12, in_proto_mask);
-    to_little_endian<uint16_t>(ubx_cfg_prt_msg + 14, out_proto_mask);
-    to_little_endian<uint16_t>(ubx_cfg_prt_msg + 16, flags);
-    to_little_endian<uint8_t>(ubx_cfg_prt_msg + 18, 0);
-    to_little_endian<uint8_t>(ubx_cfg_prt_msg + 19, 0);
+    (Pack<sizeof(ubx_cfg_prt_msg)>(ubx_cfg_prt_msg)
+        << port_id
+        << reserved
+        << tx_ready
+        << mode
+        << baud_rate
+        << in_proto_mask
+        << out_proto_mask
+        << flags
+        << reserved
+        << reserved).finalize();
     return _send_ubx_cfg(0x00, sizeof(ubx_cfg_prt_msg), ubx_cfg_prt_msg);
 }
 
@@ -560,11 +654,81 @@ bool GpsUBlox::_send_ubx_cfg_msg(uint8_t const msg_class,
                                  uint8_t const msg_id,
                                  uint8_t const rate)
 {
-    uint8_t ubx_cfg_prt_msg[3];
-    to_little_endian<uint8_t>(ubx_cfg_prt_msg + 0, msg_class);
-    to_little_endian<uint8_t>(ubx_cfg_prt_msg + 1, msg_id);
-    to_little_endian<uint8_t>(ubx_cfg_prt_msg + 2, rate);
-    return _send_ubx_cfg(0x01, sizeof(ubx_cfg_prt_msg), ubx_cfg_prt_msg);
+    uint8_t ubx_cfg_msg_msg[3];
+    (Pack<sizeof(ubx_cfg_msg_msg)>(ubx_cfg_msg_msg)
+        << msg_class
+        << msg_id
+        << rate).finalize();
+    return _send_ubx_cfg(0x01, sizeof(ubx_cfg_msg_msg), ubx_cfg_msg_msg);
+}
+
+bool GpsUBlox::_send_ubx_cfg_tp5(uint8_t const tpIdx,
+                                 int16_t const antCableDelay,
+                                 int16_t const rfGroupDelay,
+                                 uint32_t const freqPeriod,
+                                 uint32_t const freqPeriodLock,
+                                 uint32_t const pulseLenRatio,
+                                 uint32_t const pulseLenRatioLock,
+                                 int32_t const userConfigDelay,
+                                 bool active,
+                                 bool lockGnssFreq,
+                                 bool lockedOtherSet,
+                                 bool isFreq,
+                                 bool isLength,
+                                 bool alignToTow,
+                                 bool polarity,
+                                 uint8_t gridUtcGnss,
+                                 uint8_t syncMode)
+{
+    uint32_t flags = 0;
+    if (active)
+    {
+        flags |= 0x00000001;
+    }
+    if (lockGnssFreq)
+    {
+        flags |= 0x00000002;
+    }
+    if (lockedOtherSet)
+    {
+        flags |= 0x00000004;
+    }
+    if (isFreq)
+    {
+        flags |= 0x00000008;
+    }
+    if (isLength)
+    {
+        flags |= 0x00000010;
+    }
+    if (alignToTow)
+    {
+        flags |= 0x00000020;
+    }
+    if (polarity)
+    {
+        flags |= 0x00000040;
+    }
+    flags |= (gridUtcGnss & 0xf) << 7;
+    flags |= (syncMode & 0x7) << 11;
+
+    uint8_t constexpr reserved = 0;
+    uint8_t constexpr version = 0x01;
+    uint8_t ubx_cfg_tp5_msg[32];
+    (Pack<sizeof(ubx_cfg_tp5_msg)>(ubx_cfg_tp5_msg)
+        << tpIdx
+        << version
+        << reserved
+        << reserved
+        << antCableDelay
+        << rfGroupDelay
+        << freqPeriod
+        << freqPeriodLock
+        << pulseLenRatio
+        << pulseLenRatioLock
+        << userConfigDelay
+        << flags).finalize();
+    return _send_ubx_cfg(0x31, sizeof(ubx_cfg_tp5_msg), ubx_cfg_tp5_msg);
 }
 
 void GpsUBlox::_service_uart()
@@ -899,9 +1063,17 @@ void GpsUBlox::update()
                 bool const weekValid  = valid & 0x02;
                 bool const leapSValid = valid & 0x04;
 
+                #pragma GCC diagnostic push
+                #pragma GCC diagnostic ignored "-Wunused-variable"
                 bool const time_ok = towValid && weekValid && leapSValid;
+                #pragma GCC diagnostic pop
 
-                printf("TIMEGPS %d %ld %ld +/- %ld : %d (%s)\n", week, iTOW, fTOW, tAcc, leapS, time_ok ? " valid " : "INVALID");
+                //printf("TIMEGPS %d %ld %ld +/- %ld : %d (%s)\n", week, iTOW, fTOW, tAcc, leapS, time_ok ? " valid " : "INVALID");
+
+                uint32_t pps_completed_seconds, pps_bicycles_in_last_second;
+                pps->get_status(&pps_completed_seconds, &pps_bicycles_in_last_second);
+
+                printf("%lu,%lu,%d,%lu,%ld,%lu,%d,0x%02x\n", pps_completed_seconds, pps_bicycles_in_last_second*2, week, iTOW, fTOW, tAcc, leapS, valid);
             }
         }
     }
@@ -931,7 +1103,7 @@ int main()
     stdio_init_all();
 
     printf("Paused...\n");
-    sleep_ms(1000);
+    sleep_ms(4000);
     printf("Go!\n");
 
     uint constexpr led_pin = 25;
@@ -969,7 +1141,7 @@ int main()
         pps->get_status(&completed_seconds, &bicycles_in_last_second);
         if (completed_seconds != prev_completed_seconds)
         {
-            printf("PPS: %ld %ld\n", completed_seconds, 2 * bicycles_in_last_second);
+            //printf("PPS: %ld %ld\n", completed_seconds, 2 * bicycles_in_last_second);
             prev_completed_seconds = completed_seconds;
         }
 
