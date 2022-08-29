@@ -513,7 +513,12 @@ GpsUBlox::GpsUBlox(uart_inst_t * const uart_id, uint const tx_pin, uint const rx
         return;
     }
 
-    if (!_send_ubx_cfg_msg(0x01, 0x20, 1))
+    if (!_send_ubx_cfg_msg(0x01, 0x20, 0))
+    {
+        return;
+    }
+
+    if (!_send_ubx_cfg_msg(0x0D, 0x01, 1))
     {
         return;
     }
@@ -1074,6 +1079,47 @@ void GpsUBlox::update()
                 pps->get_status(&pps_completed_seconds, &pps_bicycles_in_last_second);
 
                 printf("%lu,%lu,%d,%lu,%ld,%lu,%d,0x%02x\n", pps_completed_seconds, pps_bicycles_in_last_second*2, week, iTOW, fTOW, tAcc, leapS, valid);
+            }
+        }
+        else if (rx_msg_class == 0x0D) // UBX-TIM
+        {
+            if (rx_msg_id == 0x01) // UBX-TIM-TP
+            {
+                constexpr size_t len = 16;
+                if (rx_msg_len != len)
+                {
+                    continue;
+                }
+                uint32_t towMS;
+                uint32_t towSubMS;
+                int32_t qErr;
+                uint16_t week;
+                uint8_t flags;
+                uint8_t refInfo;
+
+                (Unpack<len>(rx_msg)
+                    >> towMS
+                    >> towSubMS
+                    >> qErr
+                    >> week
+                    >> flags
+                    >> refInfo).finalize();
+
+                #pragma GCC diagnostic push
+                #pragma GCC diagnostic ignored "-Wunused-variable"
+                bool const timeBase    =  flags & 0x01;
+                bool const utc         =  flags & 0x02;
+                bool const raim        = (flags & 0x0c) >> 2;
+                bool const qErrInvalid =  flags & 0x10;
+
+                bool const timeRefGnss =  refInfo & 0x0f;
+                bool const utcStandard = (refInfo & 0xf0) >> 4;
+                #pragma GCC diagnostic pop
+
+                uint32_t pps_completed_seconds, pps_bicycles_in_last_second;
+                pps->get_status(&pps_completed_seconds, &pps_bicycles_in_last_second);
+
+                printf("%lu,%lu,%u,%lu,%lu,%ld,%02x,%02x\n", pps_completed_seconds, pps_bicycles_in_last_second*2, week, towMS, towSubMS, qErr, flags, refInfo);
             }
         }
     }
