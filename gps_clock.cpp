@@ -16,6 +16,9 @@
 
 #include "pps.pio.h"
 
+#include "util.h"
+#include "time.h"
+
 class GpioOut
 {
 public:
@@ -115,67 +118,6 @@ private:
 };
 
 std::unique_ptr<Pps> pps;
-
-template <typename T, size_t size>
-concept IsWidth = sizeof(T) == size;
-
-template <typename T>
-class WidthMatch
-{
-};
-
-template <typename T>
-requires std::integral<T> && IsWidth<T, 4>
-class WidthMatch<T>
-{
-public:
-    using u = uint32_t;
-    using s = int32_t;
-};
-
-template <typename T>
-requires std::integral<T> && IsWidth<T, 2>
-class WidthMatch<T>
-{
-public:
-    using u = uint16_t;
-    using s = int16_t;
-};
-
-template <typename T>
-requires std::integral<T> && IsWidth<T, 1>
-class WidthMatch<T>
-{
-public:
-    using u = uint8_t;
-    using s = int8_t;
-};
-
-template <typename U, typename S>
-requires std::same_as<U, typename WidthMatch<S>::u>
-inline constexpr S signed_from_unsigned_twos_complement(U twos_complement)
-{
-    if (twos_complement > std::numeric_limits<S>::max())
-    {
-        U const u_absolute_value = (~twos_complement) + 1;
-        if (u_absolute_value > std::numeric_limits<S>::max())
-        {
-            return std::numeric_limits<S>::lowest();
-        }
-        S const s_absolute_value = u_absolute_value;
-        return -s_absolute_value;
-    }
-    S value = twos_complement;
-    return value;
-}
-
-template <typename U, typename S>
-requires std::same_as<U, typename WidthMatch<S>::u>
-inline constexpr U unsigned_twos_complement_from_signed(S value)
-{
-    U const twos_complement = value;
-    return twos_complement;
-}
 
 template <typename T>
 requires std::unsigned_integral<T>
@@ -470,7 +412,6 @@ std::unique_ptr<GpsUBlox> gps;
 
 void GpsUBlox_handle_interrupt()
 {
-    led->toggle();
     gps->_handle_interrupt();
 }
 
@@ -508,17 +449,22 @@ GpsUBlox::GpsUBlox(uart_inst_t * const uart_id, uint const tx_pin, uint const rx
         return;
     }
 
-    if (!_send_ubx_cfg_msg(0x01, 0x07, 0))
+    if (!_send_ubx_cfg_msg(0x01, 0x07, 1)) // UBX-NAV-PVT
     {
         return;
     }
 
-    if (!_send_ubx_cfg_msg(0x01, 0x20, 0))
+    if (!_send_ubx_cfg_msg(0x01, 0x20, 1)) // UBX-NAV-TIMEGPS
     {
         return;
     }
 
-    if (!_send_ubx_cfg_msg(0x0D, 0x01, 1))
+    if (!_send_ubx_cfg_msg(0x01, 0x26, 1)) // UBX-NAV-TIMELS
+    {
+        return;
+    }
+
+    if (!_send_ubx_cfg_msg(0x0D, 0x01, 1)) // UBX-TIM-TP
     {
         return;
     }
@@ -1038,7 +984,7 @@ void GpsUBlox::update()
                     }
                 }
 
-                printf("PVT     %02d-%02d-%02d %02d:%02d:%02d.%03ld %03ld %03ld +/- %5ld ns    (%s)      %ld.%07ld, %ld.%07ld - %d sats\n", year, month, day, hour, min, sec, nano/1000000, nano/1000%1000, nano%1000, tAcc, time_ok ? " valid " : "INVALID", lat/10000000, labs(lat)%10000000, lon/10000000, labs(lon)%10000000, numSV);
+                printf("UBX-NAV-PVT     %lu    %02d-%02d-%02d %02d:%02d:%02d.%03ld %03ld %03ld +/- %5ld ns    (%s)      %ld.%07ld, %ld.%07ld - %d sats\n", iTOW, year, month, day, hour, min, sec, nano/1000000, nano/1000%1000, nano%1000, tAcc, time_ok ? " valid " : "INVALID", lat/10000000, labs(lat)%10000000, lon/10000000, labs(lon)%10000000, numSV);
 
                 _last_ubx_nav_pvt_reported_leap_second = this_message_reported_leap_second;
             }
@@ -1073,12 +1019,54 @@ void GpsUBlox::update()
                 bool const time_ok = towValid && weekValid && leapSValid;
                 #pragma GCC diagnostic pop
 
-                //printf("TIMEGPS %d %ld %ld +/- %ld : %d (%s)\n", week, iTOW, fTOW, tAcc, leapS, time_ok ? " valid " : "INVALID");
+                printf("UBX-NAV-TIMEGPS,%d,%lu,%ld,%lu,%d,0x%02x\n", week, iTOW, fTOW, tAcc, leapS, valid);
+            }
+            else if (rx_msg_id == 0x26) // UBX-NAV-TIMELS
+            {
+                constexpr size_t len = 24;
+                if (rx_msg_len != len)
+                {
+                    continue;
+                }
+                uint32_t iTOW;
+                uint8_t version;
+                uint8_t reserved;
+                uint8_t srcOfCurrLs;
+                int8_t currLs;
+                uint8_t srcOfLsChange;
+                int8_t lsChange;
+                int32_t timeToLsEvent;
+                uint16_t dateOfLsGpsWn;
+                uint16_t dateOfLsGpsDn;
+                uint8_t valid;
 
-                uint32_t pps_completed_seconds, pps_bicycles_in_last_second;
-                pps->get_status(&pps_completed_seconds, &pps_bicycles_in_last_second);
+                (Unpack<len>(rx_msg)
+                    >> iTOW
+                    >> version
+                    >> reserved
+                    >> reserved
+                    >> reserved
+                    >> srcOfCurrLs
+                    >> currLs
+                    >> srcOfLsChange
+                    >> lsChange
+                    >> timeToLsEvent
+                    >> dateOfLsGpsWn
+                    >> dateOfLsGpsDn
+                    >> reserved
+                    >> reserved
+                    >> reserved
+                    >> valid).finalize();
 
-                printf("%lu,%lu,%d,%lu,%ld,%lu,%d,0x%02x\n", pps_completed_seconds, pps_bicycles_in_last_second*2, week, iTOW, fTOW, tAcc, leapS, valid);
+                if (version != 0)
+                {
+                    continue;
+                }
+
+                bool const validCurrLs        = valid & 0x01;
+                bool const validTimeToLsEvent = valid & 0x02;
+
+                printf("UBX-NAV-TIMELS,%lu,%d,%d,%ld,%d,%d\n", iTOW, currLs, lsChange, timeToLsEvent, validCurrLs, validTimeToLsEvent);
             }
         }
         else if (rx_msg_class == 0x0D) // UBX-TIM
@@ -1119,7 +1107,7 @@ void GpsUBlox::update()
                 uint32_t pps_completed_seconds, pps_bicycles_in_last_second;
                 pps->get_status(&pps_completed_seconds, &pps_bicycles_in_last_second);
 
-                printf("%lu,%lu,%u,%lu,%lu,%ld,%02x,%02x\n", pps_completed_seconds, pps_bicycles_in_last_second*2, week, towMS, towSubMS, qErr, flags, refInfo);
+                printf("UBX-TIM-TP,%lu,%lu,%u,%lu,%lu,%ld,%02x,%02x\n", pps_completed_seconds, pps_bicycles_in_last_second*2, week, towMS, towSubMS, qErr, flags, refInfo);
             }
         }
     }
@@ -1132,6 +1120,13 @@ void GpsUBlox::_handle_interrupt()
     {
         _rx_buf.push(uart_getc(_uart_id));
     }
+}
+
+bool self_test()
+{
+    test_assert(time_test());
+
+    return true;
 }
 
 void core1_main()
@@ -1157,6 +1152,20 @@ int main()
     led = std::make_unique<GpioOut>(led_pin);
     printf("LED init complete.\n");
 
+    printf("Running self test...\n");
+    if (!self_test())
+    {
+        while (true)
+        {
+            printf("Self test failed!\n");
+            led->on();
+            sleep_ms(200);
+            led->off();
+            sleep_ms(200);
+        }
+    }
+    printf("Self test passed.\n");
+
     uint constexpr pps_pin = 18;
     bi_decl(bi_1pin_with_name(pps_pin, "PPS"));
     pps = std::make_unique<Pps>(pio0, pps_pin);
@@ -1177,6 +1186,8 @@ int main()
     {
         printf("GPS init FAILED.\n");
     }
+
+    led->on();
 
     multicore_launch_core1(core1_main);
 
