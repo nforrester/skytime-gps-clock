@@ -1,9 +1,19 @@
 #include "time.h"
 #include "util.h"
 
-Ymdhms::Ymdhms(uint16_t year_, uint8_t month_, uint8_t day_, uint8_t hour_, uint8_t min_, uint8_t sec_):
-    year(year_), month(month_), day(day_), hour(hour_), min(min_), sec(sec_)
+Ymdhms::Ymdhms(uint16_t year_, uint8_t month_, uint8_t day_, uint8_t hour_, uint8_t min_, uint8_t sec_)
 {
+    set(year_, month_, day_, hour_, min_, sec_);
+}
+
+void Ymdhms::set(uint16_t year_, uint8_t month_, uint8_t day_, uint8_t hour_, uint8_t min_, uint8_t sec_)
+{
+    year = year_;
+    month = month_;
+    day = day_;
+    hour = hour_;
+    min = min_;
+    sec = sec_;
 }
 
 void Ymdhms::add_seconds(int32_t dt_seconds)
@@ -57,6 +67,142 @@ void Ymdhms::_from_gdays(int64_t gdays)
     year = y;
     month = mm;
     day = dd;
+}
+
+void TopOfSecond::invalidate()
+{
+    gps_time_of_week_seconds_valid = false;
+    utc_ymdhms_valid = false;
+    tai_ymdhms_valid = false;
+    loc_ymdhms_valid = false;
+    gps_minus_utc_valid = false;
+    next_leap_second_valid = false;
+}
+
+void TopOfSecond::set_next_leap_second(int32_t time_until, int32_t direction)
+{
+    next_leap_second_time_until = time_until;
+    next_leap_second_direction = direction;
+    next_leap_second_valid = true;
+}
+
+void TopOfSecond::set_gps_time_of_week_seconds(uint32_t value)
+{
+    gps_time_of_week_seconds = value;
+    gps_time_of_week_seconds_valid = true;
+}
+
+void TopOfSecond::set_utc_ymdhms(uint16_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t min, uint8_t sec)
+{
+    utc_ymdhms.set(year, month, day, hour, min, sec);
+    utc_ymdhms_valid = true;
+    _try_set_tai_ymdhms();
+    _try_set_loc_ymdhms();
+}
+
+void TopOfSecond::set_gps_minus_utc(int8_t value)
+{
+    gps_minus_utc = value;
+    gps_minus_utc_valid = true;
+    _try_set_tai_ymdhms();
+}
+
+void TopOfSecond::set_from_prev_second(TopOfSecond const & prev)
+{
+    if ((!tai_ymdhms_valid) && prev.tai_ymdhms_valid)
+    {
+        tai_ymdhms = prev.tai_ymdhms;
+        tai_ymdhms.add_seconds(1);
+        tai_ymdhms_valid = true;
+    }
+
+    if ((!utc_ymdhms_valid) && prev.utc_ymdhms_valid && prev.next_leap_second_valid)
+    {
+        bool const leap_second_far_future = prev.next_leap_second_time_until > 20;
+        bool const leap_second_far_past = prev.next_leap_second_time_until < -20;
+        bool const leap_second_this_top_of_minute =
+            !(leap_second_far_future || leap_second_far_past);
+        bool did_something_special = false;
+        if (leap_second_this_top_of_minute)
+        {
+            if (prev.next_leap_second_direction > 0)
+            {
+                if (prev.utc_ymdhms.sec == 59)
+                {
+                    utc_ymdhms = prev.utc_ymdhms;
+                    utc_ymdhms.sec = 60;
+                    utc_ymdhms_valid = true;
+                    did_something_special = true;
+                } else if (prev.utc_ymdhms.sec == 60)
+                {
+                    utc_ymdhms = prev.utc_ymdhms;
+                    utc_ymdhms.sec = 59;
+                    utc_ymdhms.add_seconds(1);
+                    utc_ymdhms_valid = true;
+                    did_something_special = true;
+                }
+            }
+            else
+            {
+                if (prev.utc_ymdhms.sec == 58)
+                {
+                    utc_ymdhms = prev.utc_ymdhms;
+                    utc_ymdhms.add_seconds(2);
+                    utc_ymdhms_valid = true;
+                    did_something_special = true;
+                }
+            }
+        }
+        if (!did_something_special)
+        {
+            utc_ymdhms = prev.utc_ymdhms;
+            utc_ymdhms.add_seconds(1);
+            utc_ymdhms_valid = true;
+        }
+    }
+
+    _try_set_loc_ymdhms();
+}
+
+void TopOfSecond::_try_set_tai_ymdhms()
+{
+    if (tai_ymdhms_valid)
+    {
+        return;
+    }
+
+    if (!(utc_ymdhms_valid && gps_minus_utc_valid))
+    {
+        return;
+    }
+
+    tai_ymdhms = utc_ymdhms;
+    tai_ymdhms.add_seconds(tai_minus_gps + gps_minus_utc);
+    tai_ymdhms_valid = true;
+}
+
+void TopOfSecond::_try_set_loc_ymdhms()
+{
+    if (loc_ymdhms_valid)
+    {
+        return;
+    }
+
+    if (!utc_ymdhms_valid)
+    {
+        return;
+    }
+
+    loc_ymdhms = utc_ymdhms;
+    loc_ymdhms.add_seconds(loc_minus_utc_seconds);
+    loc_ymdhms_valid = true;
+}
+
+void TopsOfSeconds::top_of_second_has_passed()
+{
+    _next = mod(_next + 1, buffer_size);
+    next().invalidate();
+    next().set_from_prev_second(prev());
 }
 
 bool time_test()
