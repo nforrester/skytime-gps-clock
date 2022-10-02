@@ -5,6 +5,7 @@
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include "hardware/uart.h"
+#include "hardware/i2c.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wvolatile"
@@ -1014,6 +1015,207 @@ void GpsUBlox::update()
     }
 }
 
+class Ht16k33
+{
+public:
+    Ht16k33(i2c_inst_t *i2c, uint const sda_pin, uint const scl_pin);
+
+    bool initialized_successfully() const
+    {
+        return _initialized_successfully;
+    }
+
+    bool send_image(uint32_t image);
+    bool send_chars(char left_char, bool left_dot, char right_char, bool right_dot);
+
+private:
+    bool _initialized_successfully = false;
+
+    static constexpr uint8_t _addr = 0x70;
+    static constexpr size_t _image_size = 4;
+
+    i2c_inst_t * const _i2c_inst;
+
+    bool _send_1_byte_cmd(uint8_t cmd);
+    bool _send_image(uint8_t const * image);
+    uint32_t _char_to_image(char c);
+    uint32_t _dot_to_image(bool dot);
+};
+
+Ht16k33::Ht16k33(i2c_inst_t *i2c_inst, uint const sda_pin, uint const scl_pin):
+    _i2c_inst(i2c_inst)
+{
+    i2c_init(_i2c_inst, 10000);
+    gpio_set_function(sda_pin, GPIO_FUNC_I2C);
+    gpio_set_function(scl_pin, GPIO_FUNC_I2C);
+    gpio_pull_up(sda_pin);
+    gpio_pull_up(scl_pin);
+
+    sleep_ms(1000);
+
+    // Enable internal system clock
+    if (!_send_1_byte_cmd(0x21))
+    {
+        printf("HT16K33 Fail 1.\n");
+        return;
+    }
+
+    // Max brightness
+    if (!_send_1_byte_cmd(0xef))
+    {
+        printf("HT16K33 Fail 2.\n");
+        return;
+    }
+
+    // Display on, no blinking
+    if (!_send_1_byte_cmd(0x81))
+    {
+        printf("HT16K33 Fail 3.\n");
+        return;
+    }
+
+    // Set test image
+    uint8_t image[_image_size] = {0x55, 0x55, 0xaa, 0xaa};
+    if (!_send_image(image))
+    {
+        printf("HT16K33 Fail 4.\n");
+        return;
+    }
+
+    _initialized_successfully = true;
+}
+
+bool Ht16k33::_send_1_byte_cmd(uint8_t cmd)
+{
+    int const bytes_written = i2c_write_blocking(_i2c_inst, _addr, &cmd, 1, false);
+    return bytes_written == 1;
+}
+
+bool Ht16k33::_send_image(uint8_t const * image)
+{
+    uint8_t cmd[_image_size + 1];
+    cmd[0] = 0x00;
+    for (size_t i = 1; i <= _image_size; ++i)
+    {
+        cmd[i] = image[i-1];
+    }
+    int const bytes_written = i2c_write_blocking(_i2c_inst, _addr, &cmd[0], _image_size + 1, false);
+    return bytes_written == _image_size + 1;
+}
+
+bool Ht16k33::send_image(uint32_t image)
+{
+    uint8_t image_bytes[4];
+    image_bytes[0] = (image >>  0) & 0xff;
+    image_bytes[1] = (image >>  8) & 0xff;
+    image_bytes[2] = (image >> 16) & 0xff;
+    image_bytes[3] = (image >> 24) & 0xff;
+    return _send_image(&image_bytes[0]);
+}
+
+bool Ht16k33::send_chars(char left_char, bool left_dot, char right_char, bool right_dot)
+{
+    uint32_t image = 0;
+    image |= _char_to_image(left_char);
+    image |= _dot_to_image(left_dot);
+    image <<= 16;
+    image |= _char_to_image(right_char);
+    image |= _dot_to_image(right_dot);
+    return send_image(image);
+}
+
+
+uint32_t Ht16k33::_char_to_image(char ch)
+{
+    /* -----A-----
+     * |\   |   /|
+     * | \  |  / |
+     * B  C D E  F
+     * |   \|/   |
+     * *-G--*--H-*
+     * |   /|\   |
+     * I  J K L  M
+     * | /  |  \ |
+     * |/   |   \|
+     * -----N----- */
+
+    uint32_t constexpr a = 0x0020;
+    uint32_t constexpr b = 0x0001;
+    uint32_t constexpr c = 0x0002;
+    uint32_t constexpr d = 0x0004;
+    uint32_t constexpr e = 0x0008;
+    uint32_t constexpr f = 0x0040;
+    uint32_t constexpr g = 0x0010;
+    uint32_t constexpr h = 0x0400;
+    uint32_t constexpr i = 0x4000;
+    uint32_t constexpr j = 0x2000;
+    uint32_t constexpr k = 0x1000;
+    uint32_t constexpr l = 0x0800;
+    uint32_t constexpr m = 0x0080;
+    uint32_t constexpr n = 0x0200;
+
+    uint32_t constexpr letters[26] = {
+        /* a */ a|b|f|g|h|i|m,
+        /* b */ a|d|f|h|k|m|n,
+        /* c */ a|b|i|n,
+        /* d */ a|d|f|k|m|n,
+        /* e */ a|b|g|h|i|n,
+        /* f */ a|b|g|h|i,
+        /* g */ a|b|h|i|m|n,
+        /* h */ b|f|g|h|i|m,
+        /* i */ a|d|k|n,
+        /* j */ f|i|m|n,
+        /* k */ b|e|g|i|l,
+        /* l */ b|i|n,
+        /* m */ b|c|e|f|i|m,
+        /* n */ b|c|f|i|l|m,
+        /* o */ a|b|f|i|m|n,
+        /* p */ a|b|f|g|h|i,
+        /* q */ a|b|f|i|l|m|n,
+        /* r */ a|b|f|g|h|i|l,
+        /* s */ a|b|g|h|m|n,
+        /* t */ a|d|k,
+        /* u */ b|f|i|m|n,
+        /* v */ b|e|i|j,
+        /* w */ b|f|i|j|l|m,
+        /* x */ c|e|j|l,
+        /* y */ c|e|k,
+        /* z */ a|e|j|n,
+    };
+
+    uint32_t constexpr digits[10] = {
+        /* 0 */ a|b|e|f|i|j|m|n,
+        /* 1 */ f|m,
+        /* 2 */ a|f|g|h|i|n,
+        /* 3 */ a|f|h|m|n,
+        /* 4 */ b|f|g|h|m,
+        /* 5 */ a|b|g|h|m|n,
+        /* 6 */ b|g|h|i|m|n,
+        /* 7 */ a|e|j,
+        /* 8 */ a|b|f|g|h|i|m|n,
+        /* 9 */ a|b|f|g|h|m,
+    };
+
+    if ('a' <= ch && ch <= 'z')
+    {
+        return letters[ch - 'a'];
+    }
+    if ('A' <= ch && ch <= 'Z')
+    {
+        return letters[ch - 'A'];
+    }
+    if ('0' <= ch && ch <= '9')
+    {
+        return digits[ch - '0'];
+    }
+    return 0x0000;
+}
+
+uint32_t Ht16k33::_dot_to_image(bool dot)
+{
+    return dot ? 0x0100 : 0x0000;
+}
+
 bool self_test()
 {
     test_assert(time_test());
@@ -1079,9 +1281,27 @@ int main()
         printf("GPS init FAILED.\n");
     }
 
+    uint constexpr ht16k33_sda_pin = 14;
+    uint constexpr ht16k33_scl_pin = 15;
+    Ht16k33 ht16k33(i2c1, ht16k33_sda_pin, ht16k33_scl_pin);
+    bi_decl(bi_2pins_with_func(ht16k33_sda_pin, ht16k33_scl_pin, GPIO_FUNC_I2C));
+    if (ht16k33.initialized_successfully())
+    {
+        printf("HT16K33 init complete.\n");
+    }
+    else
+    {
+        printf("HT16K33 init FAILED.\n");
+    }
+
     led->on();
 
     multicore_launch_core1(core1_main);
+
+    char alphabet[] = "abcdefghijklmnopqrstuvwxyz0123456789";
+    size_t alpha_idx = 1;
+    size_t beta_idx = 0;
+    uint8_t dots = 0;
 
     uint32_t prev_completed_seconds = 0;
     while (true)
@@ -1100,6 +1320,15 @@ int main()
 
             prev_completed_seconds = completed_seconds;
             gps->pps_pulsed();
+
+            beta_idx = alpha_idx;
+            ++alpha_idx;
+            if (alpha_idx >= 36)
+            {
+                alpha_idx = 0;
+            }
+            ++dots;
+            ht16k33.send_chars(alphabet[beta_idx], dots & 0x2, alphabet[alpha_idx], dots & 0x1);
         }
 
         gps->update();
