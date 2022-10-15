@@ -11,6 +11,7 @@ pico_sdk_init()
 add_executable(gps_clock
     gps_clock.cpp
     time.cpp
+    util.cpp
 )
 
 pico_enable_stdio_usb(gps_clock 1)

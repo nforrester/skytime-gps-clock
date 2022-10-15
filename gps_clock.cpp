@@ -1218,6 +1218,7 @@ uint32_t Ht16k33::_dot_to_image(bool dot)
 
 bool self_test()
 {
+    test_assert(util_test());
     test_assert(time_test());
 
     return true;

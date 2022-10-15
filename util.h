@@ -1,8 +1,11 @@
 #pragma once
 
+#include <cstdint>
 #include <cstdio>
 #include <concepts>
 #include <limits>
+
+bool util_test();
 
 #define test_assert(x) if (!(x)) { printf("Failed %s at %s:%d\n", #x, __FILE__, __LINE__); return false; }
 #define test_assert_signed_eq(x, y) {auto x1 = x; auto y1 = y; if (!(x1 == y1)) { printf("Failed %d == %d at %s:%d\n", x1, y1, __FILE__, __LINE__); return false; }}
@@ -14,6 +17,15 @@ concept IsWidth = sizeof(T) == size;
 template <typename T>
 class WidthMatch
 {
+};
+
+template <typename T>
+requires std::integral<T> && IsWidth<T, 8>
+class WidthMatch<T>
+{
+public:
+    using u = uint64_t;
+    using s = int64_t;
 };
 
 template <typename T>

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cinttypes>
 
 #include "util.h"
 
@@ -55,7 +56,7 @@ public:
 
     void show() const
     {
-        printf("%d %lu     %s %d-%02d-%02d %02d:%02d:%02d      %s %d-%02d-%02d %02d:%02d:%02d     %d %d     %d %ld %ld\n",
+        printf("%d %" PRIu32 "     %s %d-%02d-%02d %02d:%02d:%02d      %s %d-%02d-%02d %02d:%02d:%02d     %d %d     %d %" PRId32 " %" PRId32 "\n",
                gps_time_of_week_seconds_valid,
                gps_time_of_week_seconds,
                utc_ymdhms_valid?"UTC":"utc",
