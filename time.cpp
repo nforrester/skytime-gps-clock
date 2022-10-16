@@ -109,14 +109,19 @@ void TopOfSecond::set_gps_minus_utc(int8_t value)
 
 void TopOfSecond::set_from_prev_second(TopOfSecond const & prev)
 {
-    if ((!tai_ymdhms_valid) && prev.tai_ymdhms_valid)
+    if (prev.tai_ymdhms_valid)
     {
         tai_ymdhms = prev.tai_ymdhms;
         tai_ymdhms.add_seconds(1);
         tai_ymdhms_valid = true;
     }
 
-    if ((!utc_ymdhms_valid) && prev.utc_ymdhms_valid && prev.next_leap_second_valid)
+    if (prev.next_leap_second_valid)
+    {
+        set_next_leap_second(prev.next_leap_second_time_until - 1, prev.next_leap_second_direction);
+    }
+
+    if (prev.utc_ymdhms_valid && prev.next_leap_second_valid)
     {
         bool const leap_second_far_future = prev.next_leap_second_time_until > 20;
         bool const leap_second_far_past = prev.next_leap_second_time_until < -20;
@@ -133,7 +138,8 @@ void TopOfSecond::set_from_prev_second(TopOfSecond const & prev)
                     utc_ymdhms.sec = 60;
                     utc_ymdhms_valid = true;
                     did_something_special = true;
-                } else if (prev.utc_ymdhms.sec == 60)
+                }
+                else if (prev.utc_ymdhms.sec == 60)
                 {
                     utc_ymdhms = prev.utc_ymdhms;
                     utc_ymdhms.sec = 59;
@@ -166,11 +172,6 @@ void TopOfSecond::set_from_prev_second(TopOfSecond const & prev)
 
 void TopOfSecond::_try_set_tai_ymdhms()
 {
-    if (tai_ymdhms_valid)
-    {
-        return;
-    }
-
     if (!(utc_ymdhms_valid && gps_minus_utc_valid))
     {
         return;
@@ -205,7 +206,7 @@ void TopsOfSeconds::top_of_second_has_passed()
     next().set_from_prev_second(prev());
 }
 
-bool time_test()
+bool ymdhms_test()
 {
     {
         Ymdhms ymdhms(2022, 1, 1, 0, 0, 0);
@@ -339,6 +340,177 @@ bool time_test()
         test_assert_signed_eq(ymdhms.min, 34);
         test_assert_signed_eq(ymdhms.sec, 43);
     }
+
+    return true;
+}
+
+bool tos_test()
+{
+    TopsOfSeconds tos;
+
+    test_assert(!tos.prev().utc_ymdhms_valid);
+    test_assert(!tos.prev().tai_ymdhms_valid);
+    test_assert(!tos.next().utc_ymdhms_valid);
+    test_assert(!tos.next().tai_ymdhms_valid);
+
+    tos.prev().set_utc_ymdhms(2015, 5, 18, 14, 3, 24);
+    tos.next().set_from_prev_second(tos.prev());
+
+    test_assert(tos.prev().utc_ymdhms_valid);
+    test_assert(!tos.prev().tai_ymdhms_valid);
+    test_assert(!tos.next().utc_ymdhms_valid);
+    test_assert(!tos.next().tai_ymdhms_valid);
+
+    tos.prev().set_gps_minus_utc(16);
+    tos.prev().set_next_leap_second(-100000, 1);
+    tos.next().set_from_prev_second(tos.prev());
+
+    test_assert(tos.prev().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.month, 5);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.day, 18);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.hour, 14);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.min, 3);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.sec, 24);
+
+    test_assert(tos.prev().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.month, 5);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.day, 18);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.hour, 14);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.min, 3);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.sec, 24+16+19);
+
+    test_assert(tos.next().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.next().utc_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.next().utc_ymdhms.month, 5);
+    test_assert_signed_eq(tos.next().utc_ymdhms.day, 18);
+    test_assert_signed_eq(tos.next().utc_ymdhms.hour, 14);
+    test_assert_signed_eq(tos.next().utc_ymdhms.min, 3);
+    test_assert_signed_eq(tos.next().utc_ymdhms.sec, 25);
+
+    test_assert(tos.next().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.next().tai_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.next().tai_ymdhms.month, 5);
+    test_assert_signed_eq(tos.next().tai_ymdhms.day, 18);
+    test_assert_signed_eq(tos.next().tai_ymdhms.hour, 14);
+    test_assert_signed_eq(tos.next().tai_ymdhms.min, 3+1);
+    test_assert_signed_eq(tos.next().tai_ymdhms.sec, (25+16+19)%60);
+
+    tos.top_of_second_has_passed();
+
+    test_assert(tos.prev().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.month, 5);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.day, 18);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.hour, 14);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.min, 3);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.sec, 25);
+
+    test_assert(tos.prev().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.month, 5);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.day, 18);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.hour, 14);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.min, 3+1);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.sec, (25+16+19)%60);
+
+    test_assert(tos.next().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.next().utc_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.next().utc_ymdhms.month, 5);
+    test_assert_signed_eq(tos.next().utc_ymdhms.day, 18);
+    test_assert_signed_eq(tos.next().utc_ymdhms.hour, 14);
+    test_assert_signed_eq(tos.next().utc_ymdhms.min, 3);
+    test_assert_signed_eq(tos.next().utc_ymdhms.sec, 26);
+
+    test_assert(tos.next().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.next().tai_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.next().tai_ymdhms.month, 5);
+    test_assert_signed_eq(tos.next().tai_ymdhms.day, 18);
+    test_assert_signed_eq(tos.next().tai_ymdhms.hour, 14);
+    test_assert_signed_eq(tos.next().tai_ymdhms.min, 3+1);
+    test_assert_signed_eq(tos.next().tai_ymdhms.sec, (26+16+19)%60);
+
+    tos.prev().set_utc_ymdhms(2022, 10, 3, 11, 55, 4);
+    tos.next().set_from_prev_second(tos.prev());
+
+    tos.prev().set_gps_minus_utc(18);
+    tos.prev().set_next_leap_second(-100000, 1);
+    tos.next().set_from_prev_second(tos.prev());
+
+    test_assert(tos.prev().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.year, 2022);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.month, 10);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.day, 3);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.hour, 11);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.min, 55);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.sec, 4);
+
+    test_assert(tos.prev().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.year, 2022);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.month, 10);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.day, 3);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.hour, 11);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.min, 55);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.sec, 4+18+19);
+
+    test_assert(tos.next().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.next().utc_ymdhms.year, 2022);
+    test_assert_signed_eq(tos.next().utc_ymdhms.month, 10);
+    test_assert_signed_eq(tos.next().utc_ymdhms.day, 3);
+    test_assert_signed_eq(tos.next().utc_ymdhms.hour, 11);
+    test_assert_signed_eq(tos.next().utc_ymdhms.min, 55);
+    test_assert_signed_eq(tos.next().utc_ymdhms.sec, 5);
+
+    test_assert(tos.next().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.next().tai_ymdhms.year, 2022);
+    test_assert_signed_eq(tos.next().tai_ymdhms.month, 10);
+    test_assert_signed_eq(tos.next().tai_ymdhms.day, 3);
+    test_assert_signed_eq(tos.next().tai_ymdhms.hour, 11);
+    test_assert_signed_eq(tos.next().tai_ymdhms.min, 55);
+    test_assert_signed_eq(tos.next().tai_ymdhms.sec, 5+18+19);
+
+    tos.top_of_second_has_passed();
+
+    test_assert(tos.prev().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.year, 2022);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.month, 10);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.day, 3);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.hour, 11);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.min, 55);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.sec, 5);
+
+    test_assert(tos.prev().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.year, 2022);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.month, 10);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.day, 3);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.hour, 11);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.min, 55);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.sec, 5+18+19);
+
+    test_assert(tos.next().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.next().utc_ymdhms.year, 2022);
+    test_assert_signed_eq(tos.next().utc_ymdhms.month, 10);
+    test_assert_signed_eq(tos.next().utc_ymdhms.day, 3);
+    test_assert_signed_eq(tos.next().utc_ymdhms.hour, 11);
+    test_assert_signed_eq(tos.next().utc_ymdhms.min, 55);
+    test_assert_signed_eq(tos.next().utc_ymdhms.sec, 6);
+
+    test_assert(tos.next().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.next().tai_ymdhms.year, 2022);
+    test_assert_signed_eq(tos.next().tai_ymdhms.month, 10);
+    test_assert_signed_eq(tos.next().tai_ymdhms.day, 3);
+    test_assert_signed_eq(tos.next().tai_ymdhms.hour, 11);
+    test_assert_signed_eq(tos.next().tai_ymdhms.min, 55);
+    test_assert_signed_eq(tos.next().tai_ymdhms.sec, 6+18+19);
+
+    return true;
+}
+
+bool time_test()
+{
+    test_assert(ymdhms_test());
+    test_assert(tos_test());
 
     return true;
 }
