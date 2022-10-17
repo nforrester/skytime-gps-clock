@@ -326,8 +326,12 @@ public:
 
     TopsOfSeconds const & tops_of_seconds() const { return _tops_of_seconds; }
 
+    uint8_t numSV() const { return _numSV; }
+
 private:
     TopsOfSeconds _tops_of_seconds;
+
+    uint8_t _numSV = 0;
 
     void _service_uart();
 
@@ -871,6 +875,8 @@ void GpsUBlox::update()
                 _tops_of_seconds.prev().set_utc_ymdhms(year, month, day, hour, min, sec);
                 _tops_of_seconds.next().set_from_prev_second(_tops_of_seconds.prev());
 
+                _numSV = numSV;
+
                 //printf("PREV ");
                 //_tops_of_seconds.prev().show();
                 //printf("NEXT ");
@@ -1317,7 +1323,7 @@ int main()
             bool const utc_valid = gps->tops_of_seconds().next().utc_ymdhms_valid;
             bool const tai_valid = gps->tops_of_seconds().next().tai_ymdhms_valid;
             bool const loc_valid = gps->tops_of_seconds().next().loc_ymdhms_valid;
-            printf("PPS: %ld %ld    %s %d-%02d-%02d %02d:%02d:%02d      %s %d-%02d-%02d %02d:%02d:%02d      %s %d-%02d-%02d %02d:%02d:%02d\n", completed_seconds, 2 * bicycles_in_last_second, utc_valid?"UTC":"utc", utc.year, utc.month, utc.day, utc.hour, utc.min, utc.sec, tai_valid?"TAI":"tai", tai.year, tai.month, tai.day, tai.hour, tai.min, tai.sec, loc_valid?"PDT":"pdt", loc.year, loc.month, loc.day, loc.hour, loc.min, loc.sec);
+            printf("PPS: %ld %ld    %s %d-%02d-%02d %02d:%02d:%02d      %s %d-%02d-%02d %02d:%02d:%02d      %s %d-%02d-%02d %02d:%02d:%02d        %d sats\n", completed_seconds, 2 * bicycles_in_last_second, utc_valid?"UTC":"utc", utc.year, utc.month, utc.day, utc.hour, utc.min, utc.sec, tai_valid?"TAI":"tai", tai.year, tai.month, tai.day, tai.hour, tai.min, tai.sec, loc_valid?"PDT":"pdt", loc.year, loc.month, loc.day, loc.hour, loc.min, loc.sec, gps->numSV());
 
             prev_completed_seconds = completed_seconds;
             gps->pps_pulsed();
