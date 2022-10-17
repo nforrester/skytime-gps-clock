@@ -2,6 +2,7 @@
 #include <memory>
 #include <vector>
 #include <limits>
+#include <charconv>
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include "hardware/uart.h"
@@ -1034,6 +1035,9 @@ public:
     bool send_image(uint32_t image);
     bool send_chars(char left_char, bool left_dot, char right_char, bool right_dot);
 
+    /* valid values range from 0 to 15 inclusive. */
+    bool set_brightness(uint8_t pulse_width);
+
 private:
     bool _initialized_successfully = false;
 
@@ -1062,21 +1066,21 @@ Ht16k33::Ht16k33(i2c_inst_t *i2c_inst, uint const sda_pin, uint const scl_pin):
     // Enable internal system clock
     if (!_send_1_byte_cmd(0x21))
     {
-        printf("HT16K33 Fail 1.\n");
+        printf("HT16K33 Failed to enable internal system clock.\n");
         return;
     }
 
-    // Max brightness
-    if (!_send_1_byte_cmd(0xef))
+    // Set brightness
+    if (!set_brightness(0))
     {
-        printf("HT16K33 Fail 2.\n");
+        printf("HT16K33 Failed to set brightness.\n");
         return;
     }
 
     // Display on, no blinking
     if (!_send_1_byte_cmd(0x81))
     {
-        printf("HT16K33 Fail 3.\n");
+        printf("HT16K33 Failed to activate display without blinking.\n");
         return;
     }
 
@@ -1084,11 +1088,20 @@ Ht16k33::Ht16k33(i2c_inst_t *i2c_inst, uint const sda_pin, uint const scl_pin):
     uint8_t image[_image_size] = {0x55, 0x55, 0xaa, 0xaa};
     if (!_send_image(image))
     {
-        printf("HT16K33 Fail 4.\n");
+        printf("HT16K33 Failed to send test image.\n");
         return;
     }
 
     _initialized_successfully = true;
+}
+
+bool Ht16k33::set_brightness(uint8_t pulse_width)
+{
+    if (pulse_width > 0xf)
+    {
+        return false;
+    }
+    return _send_1_byte_cmd(0xe0 | pulse_width);
 }
 
 bool Ht16k33::_send_1_byte_cmd(uint8_t cmd)
@@ -1305,10 +1318,9 @@ int main()
 
     multicore_launch_core1(core1_main);
 
-    char alphabet[] = "abcdefghijklmnopqrstuvwxyz0123456789";
-    size_t alpha_idx = 1;
-    size_t beta_idx = 0;
-    uint8_t dots = 0;
+    char disp_chars[2];
+    disp_chars[0] = 'X';
+    disp_chars[1] = 'X';
 
     uint32_t prev_completed_seconds = 0;
     while (true)
@@ -1328,14 +1340,20 @@ int main()
             prev_completed_seconds = completed_seconds;
             gps->pps_pulsed();
 
-            beta_idx = alpha_idx;
-            ++alpha_idx;
-            if (alpha_idx >= 36)
+            auto result = std::to_chars(&disp_chars[0], &disp_chars[0]+sizeof(disp_chars), utc.sec);
+            if (result.ec == std::errc())
             {
-                alpha_idx = 0;
+                if (result.ptr == &disp_chars[1])
+                {
+                    disp_chars[1] = disp_chars[0];
+                    disp_chars[0] = '0';
+                }
+                ht16k33.send_chars(disp_chars[0], false, disp_chars[1], false);
             }
-            ++dots;
-            ht16k33.send_chars(alphabet[beta_idx], dots & 0x2, alphabet[alpha_idx], dots & 0x1);
+            else
+            {
+                printf("Unable to format %d\n", utc.sec);
+            }
         }
 
         gps->update();
