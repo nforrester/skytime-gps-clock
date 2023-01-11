@@ -94,7 +94,7 @@ public:
     bool loc_ymdhms_valid = false;
     static uint32_t constexpr pdt_minus_utc_seconds = -7 * secs_per_hour;
     static uint32_t constexpr pst_minus_utc_seconds = -8 * secs_per_hour;
-    static uint32_t constexpr loc_minus_utc_seconds = pdt_minus_utc_seconds;
+    static uint32_t constexpr loc_minus_utc_seconds = pst_minus_utc_seconds;
 
     int8_t gps_minus_utc;
     bool gps_minus_utc_valid = false;
