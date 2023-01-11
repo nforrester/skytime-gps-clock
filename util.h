@@ -9,6 +9,7 @@ bool util_test();
 
 #define test_assert(x) if (!(x)) { printf("Failed %s at %s:%d\n", #x, __FILE__, __LINE__); return false; }
 #define test_assert_signed_eq(x, y) {auto x1 = x; auto y1 = y; if (!(x1 == y1)) { printf("Failed %d == %d at %s:%d\n", x1, y1, __FILE__, __LINE__); return false; }}
+#define test_assert_unsigned_eq(x, y) {auto x1 = x; auto y1 = y; if (!(x1 == y1)) { printf("Failed %" PRIu32 " == %" PRIu32 " at %s:%d\n", x1, y1, __FILE__, __LINE__); return false; }}
 
 
 template <typename T, size_t size>

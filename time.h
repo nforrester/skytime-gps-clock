@@ -98,6 +98,8 @@ public:
     int32_t next_leap_second_direction;
     bool next_leap_second_valid = false;
 
+    uint32_t error_count = 0;
+
     void invalidate();
     void set_next_leap_second(int32_t time_until, int32_t direction);
     void set_utc_ymdhms(uint16_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t min, uint8_t sec);
@@ -130,6 +132,16 @@ public:
     // Top of the current second
     TopOfSecond & prev() { return _tops[mod(_next - 1, buffer_size)]; }
     TopOfSecond const & prev() const { return _tops[mod(_next - 1, buffer_size)]; }
+
+    uint32_t error_count() const
+    {
+        uint32_t x = 0;
+        for (ssize_t i = 0; i < buffer_size; ++i)
+        {
+            x += _tops[i].error_count;
+        }
+        return x;
+    }
 
 private:
     static ssize_t constexpr buffer_size = 2;

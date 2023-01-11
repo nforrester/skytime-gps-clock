@@ -1235,7 +1235,8 @@ int main()
             bool const utc_valid = gps->tops_of_seconds().next().utc_ymdhms_valid;
             bool const tai_valid = gps->tops_of_seconds().next().tai_ymdhms_valid;
             bool const loc_valid = gps->tops_of_seconds().next().loc_ymdhms_valid;
-            printf("PPS: %ld %ld    %s %d-%02d-%02d %02d:%02d:%02d      %s %d-%02d-%02d %02d:%02d:%02d      %s %d-%02d-%02d %02d:%02d:%02d\n", completed_seconds, 2 * bicycles_in_last_second, utc_valid?"UTC":"utc", utc.year, utc.month, utc.day, utc.hour, utc.min, utc.sec, tai_valid?"TAI":"tai", tai.year, tai.month, tai.day, tai.hour, tai.min, tai.sec, loc_valid?"PST":"pst", loc.year, loc.month, loc.day, loc.hour, loc.min, loc.sec);
+            uint32_t const error_count = gps->tops_of_seconds().error_count();
+            printf("PPS: %ld %ld    %s %d-%02d-%02d %02d:%02d:%02d      %s %d-%02d-%02d %02d:%02d:%02d      %s %d-%02d-%02d %02d:%02d:%02d         %" PRIu32 " errors\n", completed_seconds, 2 * bicycles_in_last_second, utc_valid?"UTC":"utc", utc.year, utc.month, utc.day, utc.hour, utc.min, utc.sec, tai_valid?"TAI":"tai", tai.year, tai.month, tai.day, tai.hour, tai.min, tai.sec, loc_valid?"PST":"pst", loc.year, loc.month, loc.day, loc.hour, loc.min, loc.sec, error_count);
 
             prev_completed_seconds = completed_seconds;
             gps->pps_pulsed();

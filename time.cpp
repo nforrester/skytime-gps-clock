@@ -87,6 +87,20 @@ void TopOfSecond::set_next_leap_second(int32_t time_until, int32_t direction)
 
 void TopOfSecond::set_utc_ymdhms(uint16_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t min, uint8_t sec)
 {
+    if (utc_ymdhms_valid)
+    {
+        bool const error = (utc_ymdhms.year  != year)
+                        || (utc_ymdhms.month != month)
+                        || (utc_ymdhms.day   != day)
+                        || (utc_ymdhms.hour  != hour)
+                        || (utc_ymdhms.min   != min)
+                        || (utc_ymdhms.sec   != sec);
+        if (error)
+        {
+            ++error_count;
+        }
+    }
+
     utc_ymdhms.set(year, month, day, hour, min, sec);
     utc_ymdhms_valid = true;
     _try_set_tai_ymdhms();
@@ -170,9 +184,31 @@ void TopOfSecond::_try_set_tai_ymdhms()
         return;
     }
 
+    uint16_t old_year = tai_ymdhms.year;
+    uint8_t old_month = tai_ymdhms.month;
+    uint8_t old_day = tai_ymdhms.day;
+    uint8_t old_hour = tai_ymdhms.hour;
+    uint8_t old_min = tai_ymdhms.min;
+    uint8_t old_sec = tai_ymdhms.sec;
+    bool old_valid = tai_ymdhms_valid;
+
     tai_ymdhms = utc_ymdhms;
     tai_ymdhms.add_seconds(tai_minus_gps + gps_minus_utc);
     tai_ymdhms_valid = true;
+
+    if (old_valid)
+    {
+        bool const error = (old_year  != tai_ymdhms.year)
+                        || (old_month != tai_ymdhms.month)
+                        || (old_day   != tai_ymdhms.day)
+                        || (old_hour  != tai_ymdhms.hour)
+                        || (old_min   != tai_ymdhms.min)
+                        || (old_sec   != tai_ymdhms.sec);
+        if (error)
+        {
+            ++error_count;
+        }
+    }
 }
 
 void TopOfSecond::_try_set_loc_ymdhms()
@@ -182,9 +218,31 @@ void TopOfSecond::_try_set_loc_ymdhms()
         return;
     }
 
+    uint16_t old_year = loc_ymdhms.year;
+    uint8_t old_month = loc_ymdhms.month;
+    uint8_t old_day = loc_ymdhms.day;
+    uint8_t old_hour = loc_ymdhms.hour;
+    uint8_t old_min = loc_ymdhms.min;
+    uint8_t old_sec = loc_ymdhms.sec;
+    bool old_valid = loc_ymdhms_valid;
+
     loc_ymdhms = utc_ymdhms;
     loc_ymdhms.add_seconds(loc_minus_utc_seconds);
     loc_ymdhms_valid = true;
+
+    if (old_valid)
+    {
+        bool const error = (old_year  != loc_ymdhms.year)
+                        || (old_month != loc_ymdhms.month)
+                        || (old_day   != loc_ymdhms.day)
+                        || (old_hour  != loc_ymdhms.hour)
+                        || (old_min   != loc_ymdhms.min)
+                        || (old_sec   != loc_ymdhms.sec);
+        if (error)
+        {
+            ++error_count;
+        }
+    }
 }
 
 void TopsOfSeconds::top_of_second_has_passed()
@@ -336,18 +394,24 @@ bool tos_test()
 {
     TopsOfSeconds tos;
 
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)0);
+
     test_assert(!tos.prev().utc_ymdhms_valid);
     test_assert(!tos.prev().tai_ymdhms_valid);
+    test_assert(!tos.prev().loc_ymdhms_valid);
     test_assert(!tos.next().utc_ymdhms_valid);
     test_assert(!tos.next().tai_ymdhms_valid);
+    test_assert(!tos.next().loc_ymdhms_valid);
 
     tos.prev().set_utc_ymdhms(2015, 5, 18, 14, 3, 24);
     tos.next().set_from_prev_second(tos.prev());
 
     test_assert(tos.prev().utc_ymdhms_valid);
     test_assert(!tos.prev().tai_ymdhms_valid);
+    test_assert(tos.prev().loc_ymdhms_valid);
     test_assert(!tos.next().utc_ymdhms_valid);
     test_assert(!tos.next().tai_ymdhms_valid);
+    test_assert(!tos.next().loc_ymdhms_valid);
 
     tos.prev().set_gps_minus_utc(16);
     tos.prev().set_next_leap_second(-100000, 1);
@@ -369,6 +433,14 @@ bool tos_test()
     test_assert_signed_eq(tos.prev().tai_ymdhms.min, 3);
     test_assert_signed_eq(tos.prev().tai_ymdhms.sec, 24+16+19);
 
+    test_assert(tos.prev().loc_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.month, 5);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.day, 18);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.hour, 6);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.min, 3);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.sec, 24);
+
     test_assert(tos.next().utc_ymdhms_valid);
     test_assert_signed_eq(tos.next().utc_ymdhms.year, 2015);
     test_assert_signed_eq(tos.next().utc_ymdhms.month, 5);
@@ -384,6 +456,14 @@ bool tos_test()
     test_assert_signed_eq(tos.next().tai_ymdhms.hour, 14);
     test_assert_signed_eq(tos.next().tai_ymdhms.min, 3+1);
     test_assert_signed_eq(tos.next().tai_ymdhms.sec, (25+16+19)%60);
+
+    test_assert(tos.next().loc_ymdhms_valid);
+    test_assert_signed_eq(tos.next().loc_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.next().loc_ymdhms.month, 5);
+    test_assert_signed_eq(tos.next().loc_ymdhms.day, 18);
+    test_assert_signed_eq(tos.next().loc_ymdhms.hour, 6);
+    test_assert_signed_eq(tos.next().loc_ymdhms.min, 3);
+    test_assert_signed_eq(tos.next().loc_ymdhms.sec, 25);
 
     tos.top_of_second_has_passed();
 
@@ -403,6 +483,14 @@ bool tos_test()
     test_assert_signed_eq(tos.prev().tai_ymdhms.min, 3+1);
     test_assert_signed_eq(tos.prev().tai_ymdhms.sec, (25+16+19)%60);
 
+    test_assert(tos.prev().loc_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.month, 5);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.day, 18);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.hour, 6);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.min, 3);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.sec, 25);
+
     test_assert(tos.next().utc_ymdhms_valid);
     test_assert_signed_eq(tos.next().utc_ymdhms.year, 2015);
     test_assert_signed_eq(tos.next().utc_ymdhms.month, 5);
@@ -419,12 +507,26 @@ bool tos_test()
     test_assert_signed_eq(tos.next().tai_ymdhms.min, 3+1);
     test_assert_signed_eq(tos.next().tai_ymdhms.sec, (26+16+19)%60);
 
+    test_assert(tos.next().loc_ymdhms_valid);
+    test_assert_signed_eq(tos.next().loc_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.next().loc_ymdhms.month, 5);
+    test_assert_signed_eq(tos.next().loc_ymdhms.day, 18);
+    test_assert_signed_eq(tos.next().loc_ymdhms.hour, 6);
+    test_assert_signed_eq(tos.next().loc_ymdhms.min, 3);
+    test_assert_signed_eq(tos.next().loc_ymdhms.sec, 26);
+
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)0);
     tos.prev().set_utc_ymdhms(2022, 10, 3, 11, 55, 4);
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)2); // One error from the skip in UTC, one from the skip in LOC
     tos.next().set_from_prev_second(tos.prev());
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)3); // One error from the skip in LOC
 
     tos.prev().set_gps_minus_utc(18);
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)4); // One error from the skip in TAI
     tos.prev().set_next_leap_second(-100000, 1);
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)4);
     tos.next().set_from_prev_second(tos.prev());
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)4);
 
     test_assert(tos.prev().utc_ymdhms_valid);
     test_assert_signed_eq(tos.prev().utc_ymdhms.year, 2022);
@@ -442,6 +544,14 @@ bool tos_test()
     test_assert_signed_eq(tos.prev().tai_ymdhms.min, 55);
     test_assert_signed_eq(tos.prev().tai_ymdhms.sec, 4+18+19);
 
+    test_assert(tos.prev().loc_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.year, 2022);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.month, 10);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.day, 3);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.hour, 3);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.min, 55);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.sec, 4);
+
     test_assert(tos.next().utc_ymdhms_valid);
     test_assert_signed_eq(tos.next().utc_ymdhms.year, 2022);
     test_assert_signed_eq(tos.next().utc_ymdhms.month, 10);
@@ -458,7 +568,17 @@ bool tos_test()
     test_assert_signed_eq(tos.next().tai_ymdhms.min, 55);
     test_assert_signed_eq(tos.next().tai_ymdhms.sec, 5+18+19);
 
+    test_assert(tos.next().loc_ymdhms_valid);
+    test_assert_signed_eq(tos.next().loc_ymdhms.year, 2022);
+    test_assert_signed_eq(tos.next().loc_ymdhms.month, 10);
+    test_assert_signed_eq(tos.next().loc_ymdhms.day, 3);
+    test_assert_signed_eq(tos.next().loc_ymdhms.hour, 3);
+    test_assert_signed_eq(tos.next().loc_ymdhms.min, 55);
+    test_assert_signed_eq(tos.next().loc_ymdhms.sec, 5);
+
     tos.top_of_second_has_passed();
+
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)4);
 
     test_assert(tos.prev().utc_ymdhms_valid);
     test_assert_signed_eq(tos.prev().utc_ymdhms.year, 2022);
@@ -476,6 +596,14 @@ bool tos_test()
     test_assert_signed_eq(tos.prev().tai_ymdhms.min, 55);
     test_assert_signed_eq(tos.prev().tai_ymdhms.sec, 5+18+19);
 
+    test_assert(tos.prev().loc_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.year, 2022);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.month, 10);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.day, 3);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.hour, 3);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.min, 55);
+    test_assert_signed_eq(tos.prev().loc_ymdhms.sec, 5);
+
     test_assert(tos.next().utc_ymdhms_valid);
     test_assert_signed_eq(tos.next().utc_ymdhms.year, 2022);
     test_assert_signed_eq(tos.next().utc_ymdhms.month, 10);
@@ -491,6 +619,16 @@ bool tos_test()
     test_assert_signed_eq(tos.next().tai_ymdhms.hour, 11);
     test_assert_signed_eq(tos.next().tai_ymdhms.min, 55);
     test_assert_signed_eq(tos.next().tai_ymdhms.sec, 6+18+19);
+
+    test_assert(tos.next().loc_ymdhms_valid);
+    test_assert_signed_eq(tos.next().loc_ymdhms.year, 2022);
+    test_assert_signed_eq(tos.next().loc_ymdhms.month, 10);
+    test_assert_signed_eq(tos.next().loc_ymdhms.day, 3);
+    test_assert_signed_eq(tos.next().loc_ymdhms.hour, 3);
+    test_assert_signed_eq(tos.next().loc_ymdhms.min, 55);
+    test_assert_signed_eq(tos.next().loc_ymdhms.sec, 6);
+
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)4);
 
     return true;
 }
