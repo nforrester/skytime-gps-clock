@@ -316,12 +316,8 @@ public:
 
     TopsOfSeconds const & tops_of_seconds() const { return _tops_of_seconds; }
 
-    uint8_t numSV() const { return _numSV; }
-
 private:
     TopsOfSeconds _tops_of_seconds;
-
-    uint8_t _numSV = 0;
 
     void _service_uart();
 
@@ -850,15 +846,17 @@ void GpsUBlox::update()
 
                 int32_t pps_error_ns = nano;
 
-                bool const time_ok = validDate && validTime && fullyResolved && gnssFixOK;
+                bool const time_not_disconfirmed = (!confirmedAvai) || (confirmedDate && confirmedTime);
+                bool const time_ok = validDate && validTime && fullyResolved && time_not_disconfirmed;
                 #pragma GCC diagnostic pop
 
                 //printf("UBX-NAV-PVT     %lu    %02d-%02d-%02d %02d:%02d:%02d.%03ld %03ld %03ld +/- %5ld ns    (%s)      %ld.%07ld, %ld.%07ld - %d sats\n", iTOW, year, month, day, hour, min, sec, nano/1000000, nano/1000%1000, nano%1000, tAcc, time_ok ? " valid " : "INVALID", lat/10000000, labs(lat)%10000000, lon/10000000, labs(lon)%10000000, numSV);
 
-                _tops_of_seconds.prev().set_utc_ymdhms(year, month, day, hour, min, sec);
-                _tops_of_seconds.next().set_from_prev_second(_tops_of_seconds.prev());
-
-                _numSV = numSV;
+                if (time_ok)
+                {
+                    _tops_of_seconds.prev().set_utc_ymdhms(year, month, day, hour, min, sec);
+                    _tops_of_seconds.next().set_from_prev_second(_tops_of_seconds.prev());
+                }
             }
             else if (rx_msg_id == 0x26) // UBX-NAV-TIMELS
             {
@@ -910,8 +908,14 @@ void GpsUBlox::update()
 
                 //printf("UBX-NAV-TIMELS,%lu,%d,%d,%ld,%d,%d\n", iTOW, currLs, lsChange, timeToLsEvent, validCurrLs, validTimeToLsEvent);
 
-                _tops_of_seconds.prev().set_gps_minus_utc(currLs);
-                _tops_of_seconds.prev().set_next_leap_second(timeToLsEvent, lsChange);
+                if (validCurrLs)
+                {
+                    _tops_of_seconds.prev().set_gps_minus_utc(currLs);
+                }
+                if (validTimeToLsEvent)
+                {
+                    _tops_of_seconds.prev().set_next_leap_second(timeToLsEvent, lsChange);
+                }
                 _tops_of_seconds.next().set_from_prev_second(_tops_of_seconds.prev());
             }
         }
@@ -1231,7 +1235,7 @@ int main()
             bool const utc_valid = gps->tops_of_seconds().next().utc_ymdhms_valid;
             bool const tai_valid = gps->tops_of_seconds().next().tai_ymdhms_valid;
             bool const loc_valid = gps->tops_of_seconds().next().loc_ymdhms_valid;
-            printf("PPS: %ld %ld    %s %d-%02d-%02d %02d:%02d:%02d      %s %d-%02d-%02d %02d:%02d:%02d      %s %d-%02d-%02d %02d:%02d:%02d        %d sats\n", completed_seconds, 2 * bicycles_in_last_second, utc_valid?"UTC":"utc", utc.year, utc.month, utc.day, utc.hour, utc.min, utc.sec, tai_valid?"TAI":"tai", tai.year, tai.month, tai.day, tai.hour, tai.min, tai.sec, loc_valid?"PST":"pst", loc.year, loc.month, loc.day, loc.hour, loc.min, loc.sec, gps->numSV());
+            printf("PPS: %ld %ld    %s %d-%02d-%02d %02d:%02d:%02d      %s %d-%02d-%02d %02d:%02d:%02d      %s %d-%02d-%02d %02d:%02d:%02d\n", completed_seconds, 2 * bicycles_in_last_second, utc_valid?"UTC":"utc", utc.year, utc.month, utc.day, utc.hour, utc.min, utc.sec, tai_valid?"TAI":"tai", tai.year, tai.month, tai.day, tai.hour, tai.min, tai.sec, loc_valid?"PST":"pst", loc.year, loc.month, loc.day, loc.hour, loc.min, loc.sec);
 
             prev_completed_seconds = completed_seconds;
             gps->pps_pulsed();
