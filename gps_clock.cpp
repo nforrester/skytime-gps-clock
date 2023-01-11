@@ -297,17 +297,6 @@ private:
     size_t _w_idx = 0;
 };
 
-uint32_t gps_time_of_week_seconds_from_iTOW(uint32_t iTOW)
-{
-    uint32_t ms = iTOW % 1000;
-    uint32_t s = iTOW / 1000;
-    if (ms > 500)
-    {
-        ++s;
-    }
-    return s;
-}
-
 class GpsUBlox
 {
 public:
@@ -435,11 +424,6 @@ GpsUBlox::GpsUBlox(uart_inst_t * const uart_id, uint const tx_pin, uint const rx
     }
 
     if (!_send_ubx_cfg_msg(0x01, 0x07, 1)) // UBX-NAV-PVT
-    {
-        return;
-    }
-
-    if (!_send_ubx_cfg_msg(0x01, 0x20, 0)) // UBX-NAV-TIMEGPS
     {
         return;
     }
@@ -871,50 +855,10 @@ void GpsUBlox::update()
 
                 //printf("UBX-NAV-PVT     %lu    %02d-%02d-%02d %02d:%02d:%02d.%03ld %03ld %03ld +/- %5ld ns    (%s)      %ld.%07ld, %ld.%07ld - %d sats\n", iTOW, year, month, day, hour, min, sec, nano/1000000, nano/1000%1000, nano%1000, tAcc, time_ok ? " valid " : "INVALID", lat/10000000, labs(lat)%10000000, lon/10000000, labs(lon)%10000000, numSV);
 
-                _tops_of_seconds.prev().set_gps_time_of_week_seconds(
-                    gps_time_of_week_seconds_from_iTOW(iTOW));
                 _tops_of_seconds.prev().set_utc_ymdhms(year, month, day, hour, min, sec);
                 _tops_of_seconds.next().set_from_prev_second(_tops_of_seconds.prev());
 
                 _numSV = numSV;
-
-                //printf("PREV ");
-                //_tops_of_seconds.prev().show();
-                //printf("NEXT ");
-                //_tops_of_seconds.next().show();
-            }
-            else if (rx_msg_id == 0x20) // UBX-NAV-TIMEGPS
-            {
-                constexpr size_t len = 16;
-                if (rx_msg_len != len)
-                {
-                    continue;
-                }
-                uint32_t iTOW;
-                int32_t fTOW;
-                int16_t week;
-                int8_t leapS;
-                uint8_t valid;
-                uint32_t tAcc;
-
-                (Unpack<len>(rx_msg)
-                    >> iTOW
-                    >> fTOW
-                    >> week
-                    >> leapS
-                    >> valid
-                    >> tAcc).finalize();
-
-                bool const towValid   = valid & 0x01;
-                bool const weekValid  = valid & 0x02;
-                bool const leapSValid = valid & 0x04;
-
-                #pragma GCC diagnostic push
-                #pragma GCC diagnostic ignored "-Wunused-variable"
-                bool const time_ok = towValid && weekValid && leapSValid;
-                #pragma GCC diagnostic pop
-
-                //printf("UBX-NAV-TIMEGPS,%d,%lu,%ld,%lu,%d,0x%02x\n", week, iTOW, fTOW, tAcc, leapS, valid);
             }
             else if (rx_msg_id == 0x26) // UBX-NAV-TIMELS
             {
@@ -966,57 +910,9 @@ void GpsUBlox::update()
 
                 //printf("UBX-NAV-TIMELS,%lu,%d,%d,%ld,%d,%d\n", iTOW, currLs, lsChange, timeToLsEvent, validCurrLs, validTimeToLsEvent);
 
-                _tops_of_seconds.prev().set_gps_time_of_week_seconds(
-                    gps_time_of_week_seconds_from_iTOW(iTOW));
                 _tops_of_seconds.prev().set_gps_minus_utc(currLs);
                 _tops_of_seconds.prev().set_next_leap_second(timeToLsEvent, lsChange);
                 _tops_of_seconds.next().set_from_prev_second(_tops_of_seconds.prev());
-
-                //printf("PREV ");
-                //_tops_of_seconds.prev().show();
-                //printf("NEXT ");
-                //_tops_of_seconds.next().show();
-            }
-        }
-        else if (rx_msg_class == 0x0D) // UBX-TIM
-        {
-            if (rx_msg_id == 0x01) // UBX-TIM-TP
-            {
-                constexpr size_t len = 16;
-                if (rx_msg_len != len)
-                {
-                    continue;
-                }
-                uint32_t towMS;
-                uint32_t towSubMS;
-                int32_t qErr;
-                uint16_t week;
-                uint8_t flags;
-                uint8_t refInfo;
-
-                (Unpack<len>(rx_msg)
-                    >> towMS
-                    >> towSubMS
-                    >> qErr
-                    >> week
-                    >> flags
-                    >> refInfo).finalize();
-
-                #pragma GCC diagnostic push
-                #pragma GCC diagnostic ignored "-Wunused-variable"
-                bool const timeBase    =  flags & 0x01;
-                bool const utc         =  flags & 0x02;
-                bool const raim        = (flags & 0x0c) >> 2;
-                bool const qErrInvalid =  flags & 0x10;
-
-                bool const timeRefGnss =  refInfo & 0x0f;
-                bool const utcStandard = (refInfo & 0xf0) >> 4;
-                #pragma GCC diagnostic pop
-
-                uint32_t pps_completed_seconds, pps_bicycles_in_last_second;
-                pps->get_status(&pps_completed_seconds, &pps_bicycles_in_last_second);
-
-                //printf("UBX-TIM-TP,%lu,%lu,%u,%lu,%lu,%ld,%02x,%02x\n", pps_completed_seconds, pps_bicycles_in_last_second*2, week, towMS, towSubMS, qErr, flags, refInfo);
             }
         }
     }

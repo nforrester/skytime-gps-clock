@@ -71,7 +71,6 @@ void Ymdhms::_from_gdays(int64_t gdays)
 
 void TopOfSecond::invalidate()
 {
-    gps_time_of_week_seconds_valid = false;
     utc_ymdhms_valid = false;
     tai_ymdhms_valid = false;
     loc_ymdhms_valid = false;
@@ -84,12 +83,6 @@ void TopOfSecond::set_next_leap_second(int32_t time_until, int32_t direction)
     next_leap_second_time_until = time_until;
     next_leap_second_direction = direction;
     next_leap_second_valid = true;
-}
-
-void TopOfSecond::set_gps_time_of_week_seconds(uint32_t value)
-{
-    gps_time_of_week_seconds = value;
-    gps_time_of_week_seconds_valid = true;
 }
 
 void TopOfSecond::set_utc_ymdhms(uint16_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t min, uint8_t sec)
@@ -184,11 +177,6 @@ void TopOfSecond::_try_set_tai_ymdhms()
 
 void TopOfSecond::_try_set_loc_ymdhms()
 {
-    if (loc_ymdhms_valid)
-    {
-        return;
-    }
-
     if (!utc_ymdhms_valid)
     {
         return;

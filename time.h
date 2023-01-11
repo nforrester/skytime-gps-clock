@@ -56,9 +56,7 @@ public:
 
     void show() const
     {
-        printf("%d %" PRIu32 "     %s %d-%02d-%02d %02d:%02d:%02d      %s %d-%02d-%02d %02d:%02d:%02d     %d %d     %d %" PRId32 " %" PRId32 "\n",
-               gps_time_of_week_seconds_valid,
-               gps_time_of_week_seconds,
+        printf("%s %d-%02d-%02d %02d:%02d:%02d      %s %d-%02d-%02d %02d:%02d:%02d     %d %d     %d %" PRId32 " %" PRId32 "\n",
                utc_ymdhms_valid?"UTC":"utc",
                utc_ymdhms.year,
                utc_ymdhms.month,
@@ -81,9 +79,6 @@ public:
 
     }
 
-    uint32_t gps_time_of_week_seconds;
-    bool gps_time_of_week_seconds_valid = false;
-
     Ymdhms utc_ymdhms;
     bool utc_ymdhms_valid = false;
 
@@ -105,7 +100,6 @@ public:
 
     void invalidate();
     void set_next_leap_second(int32_t time_until, int32_t direction);
-    void set_gps_time_of_week_seconds(uint32_t value);
     void set_utc_ymdhms(uint16_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t min, uint8_t sec);
     void set_gps_minus_utc(int8_t value);
 
