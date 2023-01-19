@@ -1,0 +1,165 @@
+.program five_simd_ht16k33_busses
+.define PUBLIC nbusses 5
+.define PUBLIC data_mask 31
+.side_set 1 // Side set the I2C clock, shared on all five busses.
+
+// The PIO program will control data pin DIRECTIONS exclusively,
+// thereby toggling between pulldown and hi-z
+// (letting the pullup resistors on the busses make the values high).
+
+// Data nibbles should be provided INVERTED (bitwise not) because a 1 means "pull the bus low" and a 0 means "let the bus float high".
+
+// Each half-cycle of the I2C clock lasts for 16 PIO SM cycles (approximately).
+
+    set pins, 0            side 1      // When pindirs are outputs, pull down.
+.wrap_target
+    set pindirs, 0         side 1 [13] // Bus idle
+    pull block             side 1      // Pull the number of bytes to transmit (including the address), minus 1, into the OSR
+    mov x osr              side 1      // X is the number of bytes left to transmit, minus 1
+
+    set pindirs, data_mask side 1 [15] // Transmit start condition, pulling down data lines while leaving clock high.
+
+begin_byte:
+    set y, 1               side 0      // Transmit one additional nibble after this
+begin_nibble:
+    pull block             side 0      // Pull 4 bits (1 nibble) into the OSR (4 bits * five busses = 20 bits, wasting 12 bits)
+    out pindirs, nbusses   side 0 [13] // Write a bit to each bus
+    nop                    side 1 [15] // Allow bit to be read
+    nop                    side 0
+    out pindirs, nbusses   side 0 [14] // Write a bit to each bus
+    nop                    side 1 [15] // Allow bit to be read
+    nop                    side 0
+    out pindirs, nbusses   side 0 [14] // Write a bit to each bus
+    nop                    side 1 [15] // Allow bit to be read
+    nop                    side 0
+    out pindirs, nbusses   side 0 [14] // Write a bit to each bus
+    nop                    side 1 [15] // Allow bit to be read
+    jmp y-- begin_nibble   side 0
+    set pindirs, 0         side 0 [14] // Prepare for acknowledge
+    nop                    side 1
+    in pins, nbusses       side 1 [13] // Receive acknowledges into ISR
+    push block             side 1      // Push acknowledges for this byte.
+    jmp x-- begin_byte     side 0
+
+    set pindirs, data_mask side 0 [14] // Transmit stop condition
+    nop                    side 1 [15]
+.wrap
+
+% c-sdk {
+
+uint32_t spread_nibble_by_five(uint32_t nibble)
+{
+    uint32_t spread = 0;
+    spread |= (nibble & 0x1) << 0;
+    spread |= (nibble & 0x2) << 4;
+    spread |= (nibble & 0x4) << 8;
+    spread |= (nibble & 0x8) << 12;
+    return spread;
+}
+
+static inline bool five_simd_ht16k33_busses_program_send_byte(
+    PIO pio,
+    uint sm,
+    uint8_t const x0,
+    uint8_t const x1,
+    uint8_t const x2,
+    uint8_t const x3,
+    uint8_t const x4)
+{
+    uint32_t const nibble_set_lo = (spread_nibble_by_five((x0 & 0x0f) >> 0) << 0)
+                                 | (spread_nibble_by_five((x1 & 0x0f) >> 0) << 1)
+                                 | (spread_nibble_by_five((x2 & 0x0f) >> 0) << 2)
+                                 | (spread_nibble_by_five((x3 & 0x0f) >> 0) << 3)
+                                 | (spread_nibble_by_five((x4 & 0x0f) >> 0) << 4);
+
+    uint32_t const nibble_set_hi = (spread_nibble_by_five((x0 & 0xf0) >> 4) << 0)
+                                 | (spread_nibble_by_five((x1 & 0xf0) >> 4) << 1)
+                                 | (spread_nibble_by_five((x2 & 0xf0) >> 4) << 2)
+                                 | (spread_nibble_by_five((x3 & 0xf0) >> 4) << 3)
+                                 | (spread_nibble_by_five((x4 & 0xf0) >> 4) << 4);
+
+    pio_sm_put_blocking(pio, sm, ~nibble_set_hi << 12);
+    pio_sm_put_blocking(pio, sm, ~nibble_set_lo << 12);
+    uint32_t const ack_batch = pio_sm_get_blocking(pio, sm);
+    return ack_batch == 0;
+}
+
+static inline bool five_simd_ht16k33_busses_program_send_command(
+    PIO pio,
+    uint sm,
+    uint8_t const addr,
+    bool const write,
+    size_t const cmd_length,
+    uint8_t const * const cmd0,
+    uint8_t const * const cmd1,
+    uint8_t const * const cmd2,
+    uint8_t const * const cmd3,
+    uint8_t const * const cmd4)
+{
+    bool success = true;
+
+    pio_sm_put_blocking(pio, sm, cmd_length);
+
+    uint8_t const addr_with_write = (addr << 1) | (write ? 0 : 1);
+    success &= five_simd_ht16k33_busses_program_send_byte(pio,
+                                                          sm,
+                                                          addr_with_write,
+                                                          addr_with_write,
+                                                          addr_with_write,
+                                                          addr_with_write,
+                                                          addr_with_write);
+
+    for (size_t i = 0; i < cmd_length; ++i)
+    {
+        success &= five_simd_ht16k33_busses_program_send_byte(pio,
+                                                              sm,
+                                                              *(cmd0 + i),
+                                                              *(cmd1 + i),
+                                                              *(cmd2 + i),
+                                                              *(cmd3 + i),
+                                                              *(cmd4 + i));
+    }
+
+    return success;
+}
+
+static inline void five_simd_ht16k33_busses_program_init(PIO pio, uint sm, uint offset, uint clock_pin, uint first_of_five_consecutive_data_pins)
+{
+    pio_sm_config c = five_simd_ht16k33_busses_program_get_default_config(offset);
+
+    sm_config_set_in_shift(&c, false, false, 32);
+    sm_config_set_out_shift(&c, false, false, 32);
+
+    // Side-set the shared clock pin.
+    sm_config_set_sideset_pins(&c, clock_pin);
+
+    // SET, OUT, and IN should all act on the data pins.
+    sm_config_set_set_pins(&c, first_of_five_consecutive_data_pins, five_simd_ht16k33_busses_nbusses);
+    sm_config_set_out_pins(&c, first_of_five_consecutive_data_pins, five_simd_ht16k33_busses_nbusses);
+    sm_config_set_in_pins(&c, first_of_five_consecutive_data_pins);
+
+    // Connect the GPIOs to the PIO instance.
+    pio_gpio_init(pio, clock_pin);
+    for (uint8_t i = 0; i < five_simd_ht16k33_busses_nbusses; ++i)
+    {
+        pio_gpio_init(pio, first_of_five_consecutive_data_pins + i);
+    }
+
+    // Set the baud rate
+    sm_config_set_clkdiv(&c, 390.625);
+
+    // Load our configuration
+    pio_sm_init(pio, sm, offset, &c);
+
+    // Clock pin is output.
+    pio_sm_set_consecutive_pindirs(pio, sm, clock_pin, 1, true);
+    // All data pins should begin as float high.
+    pio_sm_set_consecutive_pindirs(pio, sm, first_of_five_consecutive_data_pins, five_simd_ht16k33_busses_nbusses, false);
+
+    // All pins should become pull downs when outputs are enabled.
+    pio_sm_set_pins(pio, sm, 0);
+
+    // Start the program from the beginning
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}

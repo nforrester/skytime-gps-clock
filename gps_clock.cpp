@@ -1,3 +1,34 @@
+/*
+ * 5 groups of 16 characters (8 dual character modules and 8 HT16K33 chips):
+ * 3210FEDCBA9876543210  1
+ * 7654FEDCBA9876543210  2
+ * BA98FEDCBA9876543210  3
+ * FEDCFEDCBA9876543210  4
+ *    5
+ *
+ * PST YYYYMMDDhhmmssHH
+ * UTC YYYYMMDDhhmmssHH
+ * TAI YYYYMMDDhhmmssHH
+ * AREA OF GENERIC TEXT
+ *
+ * Need to write a PIO program that will operate 5 I2C interfaces simultaneously, in a SIMD fashion.
+ *
+ * Need to make the time update 100 times per second
+ *
+ * Use this to buffer from PPS line to PPS LED
+ * https://www.digikey.com/en/products/detail/diodes-incorporated/74LVC1G17W5-7/3829445
+ *
+ * Search Digikey for "Tactile Switches" to find some nice surface mount buttons.
+ *
+ * Drive analog clock with 3V H-bridge at 8Hz.
+ * Can probably do it with op amps.
+ * Use 2 of these to supply power to another 2, which form the differential drive for the analog clock coil.
+ * https://www.digikey.com/en/products/detail/onsemi/NCV2002SN2T1G/1483945
+ *
+ * Try using these to detect the hands:
+ * https://www.digikey.com/en/products/detail/vishay-semiconductor-opto-division/TCRT5000L/1681168
+ */
+
 #include <cstdio>
 #include <memory>
 #include <vector>
@@ -17,6 +48,7 @@
 #include "pico/multicore.h"
 
 #include "pps.pio.h"
+#include "five_simd_ht16k33_busses.pio.h"
 
 #include "util.h"
 #include "time.h"
@@ -925,7 +957,7 @@ void GpsUBlox::update()
 class Ht16k33
 {
 public:
-    Ht16k33(i2c_inst_t *i2c, uint const sda_pin, uint const scl_pin);
+    Ht16k33(i2c_inst_t *i2c, uint const sda_pin, uint const scl_pin, PIO pio, uint const clock_pin, uint const first_of_five_consecutive_data_pins);
 
     bool initialized_successfully() const
     {
@@ -950,16 +982,25 @@ private:
     bool _send_image(uint8_t const * image);
     uint32_t _char_to_image(char c);
     uint32_t _dot_to_image(bool dot);
+
+    PIO _pio;
+    uint _sm;
 };
 
-Ht16k33::Ht16k33(i2c_inst_t *i2c_inst, uint const sda_pin, uint const scl_pin):
-    _i2c_inst(i2c_inst)
+Ht16k33::Ht16k33(i2c_inst_t *i2c_inst, uint const sda_pin, uint const scl_pin, PIO pio, uint const clock_pin, uint const first_of_five_consecutive_data_pins):
+    _i2c_inst(i2c_inst),
+    _pio(pio)
 {
     i2c_init(_i2c_inst, 10000);
     gpio_set_function(sda_pin, GPIO_FUNC_I2C);
     gpio_set_function(scl_pin, GPIO_FUNC_I2C);
     gpio_pull_up(sda_pin);
     gpio_pull_up(scl_pin);
+
+    // New PIO version
+    uint offset = pio_add_program(_pio, &five_simd_ht16k33_busses_program);
+    _sm = pio_claim_unused_sm(_pio, true);
+    five_simd_ht16k33_busses_program_init(_pio, _sm, offset, clock_pin, first_of_five_consecutive_data_pins);
 
     sleep_ms(1000);
 
@@ -1006,8 +1047,11 @@ bool Ht16k33::set_brightness(uint8_t pulse_width)
 
 bool Ht16k33::_send_1_byte_cmd(uint8_t cmd)
 {
-    int const bytes_written = i2c_write_blocking(_i2c_inst, _addr, &cmd, 1, false);
-    return bytes_written == 1;
+    //int const bytes_written = i2c_write_blocking(_i2c_inst, _addr, &cmd, 1, false);
+    bool success = five_simd_ht16k33_busses_program_send_command(_pio, _sm, _addr, true, 1, &cmd, &cmd, &cmd, &cmd, &cmd);
+    int const bytes_written = 1; // TODO
+    //success = true; // TODO
+    return bytes_written == 1 && success;
 }
 
 bool Ht16k33::_send_image(uint8_t const * image)
@@ -1018,8 +1062,11 @@ bool Ht16k33::_send_image(uint8_t const * image)
     {
         cmd[i] = image[i-1];
     }
-    int const bytes_written = i2c_write_blocking(_i2c_inst, _addr, &cmd[0], _image_size + 1, false);
-    return bytes_written == _image_size + 1;
+    //int const bytes_written = i2c_write_blocking(_i2c_inst, _addr, &cmd[0], _image_size + 1, false);
+    bool success = five_simd_ht16k33_busses_program_send_command(_pio, _sm, _addr, true, _image_size + 1, &cmd[0], &cmd[0], &cmd[0], &cmd[0], &cmd[0]);
+    int const bytes_written = _image_size + 1; // TODO
+    //success = true; // TODO
+    return bytes_written == _image_size + 1 && success;
 }
 
 bool Ht16k33::send_image(uint32_t image)
@@ -1201,10 +1248,26 @@ int main()
         printf("GPS init FAILED.\n");
     }
 
-    uint constexpr ht16k33_sda_pin = 14;
-    uint constexpr ht16k33_scl_pin = 15;
-    Ht16k33 ht16k33(i2c1, ht16k33_sda_pin, ht16k33_scl_pin);
-    bi_decl(bi_2pins_with_func(ht16k33_sda_pin, ht16k33_scl_pin, GPIO_FUNC_I2C));
+    uint constexpr ht16k33_sda_pin_old = 14;
+    uint constexpr ht16k33_scl_pin_old = 15;
+    uint constexpr ht16k33_scl_pin = 0;
+    uint constexpr ht16k33_sda0_pin = 1;
+    uint constexpr ht16k33_sda1_pin = 2;
+    uint constexpr ht16k33_sda2_pin = 3;
+    uint constexpr ht16k33_sda3_pin = 4;
+    uint constexpr ht16k33_sda4_pin = 5;
+    printf("HT16K33 init in progress 0.\n");
+    bi_decl(bi_1pin_with_name(ht16k33_scl_pin, "DISP SCL"));
+    bi_decl(bi_1pin_with_name(ht16k33_sda0_pin, "DISP SDA0"));
+    bi_decl(bi_1pin_with_name(ht16k33_sda1_pin, "DISP SDA1"));
+    bi_decl(bi_1pin_with_name(ht16k33_sda2_pin, "DISP SDA2"));
+    bi_decl(bi_1pin_with_name(ht16k33_sda3_pin, "DISP SDA3"));
+    bi_decl(bi_1pin_with_name(ht16k33_sda4_pin, "DISP SDA4"));
+    printf("HT16K33 init in progress 1.\n");
+    Ht16k33 ht16k33(i2c1, ht16k33_sda_pin_old, ht16k33_scl_pin_old, pio1, ht16k33_scl_pin, ht16k33_sda0_pin);
+    printf("HT16K33 init in progress 2.\n");
+    bi_decl(bi_2pins_with_func(ht16k33_sda_pin_old, ht16k33_scl_pin_old, GPIO_FUNC_I2C));
+    printf("HT16K33 init in progress 3.\n");
     if (ht16k33.initialized_successfully())
     {
         printf("HT16K33 init complete.\n");
