@@ -22,4 +22,4 @@ pico_add_extra_outputs(gps_clock)
 pico_generate_pio_header(gps_clock ${CMAKE_CURRENT_LIST_DIR}/pps.pio)
 pico_generate_pio_header(gps_clock ${CMAKE_CURRENT_LIST_DIR}/five_simd_ht16k33_busses.pio)
 
-target_link_libraries(gps_clock pico_stdlib hardware_uart hardware_i2c pico_multicore hardware_pio)
+target_link_libraries(gps_clock pico_stdlib hardware_uart pico_multicore hardware_pio)
