@@ -989,7 +989,7 @@ Ht16k33::Ht16k33(PIO pio, uint const clock_pin, uint const first_of_five_consecu
 {
     uint offset = pio_add_program(_pio, &five_simd_ht16k33_busses_program);
     _sm = pio_claim_unused_sm(_pio, true);
-    five_simd_ht16k33_busses_program_init(_pio, _sm, offset, clock_pin, first_of_five_consecutive_data_pins);
+    five_simd_ht16k33_busses_program_init(_pio, _sm, offset, 400000, clock_pin, first_of_five_consecutive_data_pins);
 
     sleep_ms(1000);
 
