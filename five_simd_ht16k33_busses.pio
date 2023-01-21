@@ -47,7 +47,7 @@ begin_nibble:
 
 % c-sdk {
 
-uint32_t spread_nibble_by_five(uint32_t nibble)
+static inline uint32_t spread_nibble_by_five(uint32_t nibble)
 {
     uint32_t spread = 0;
     spread |= (nibble & 0x1) << 0;
@@ -57,7 +57,28 @@ uint32_t spread_nibble_by_five(uint32_t nibble)
     return spread;
 }
 
-static inline bool five_simd_ht16k33_busses_program_send_byte(
+static inline bool five_simd_ht16k33_busses_program_try_begin_command(
+    PIO pio,
+    uint sm,
+    size_t const cmd_length)
+{
+    if (pio_sm_is_tx_fifo_full(pio, sm))
+    {
+        // Try again later
+        return false;
+    }
+
+    pio_sm_put(pio, sm, cmd_length);
+    return true;
+}
+
+/* These three functions need to be called in sequence to send a complete byte. Each should be called repeatedly until it returns true.
+ *
+ * five_simd_ht16k33_busses_program_try_send_nibble_1(),
+ * five_simd_ht16k33_busses_program_try_send_nibble_2(),
+ * five_simd_ht16k33_busses_program_try_get_acks()
+ */
+static inline bool five_simd_ht16k33_busses_program_try_send_nibble_1(
     PIO pio,
     uint sm,
     uint8_t const x0,
@@ -66,11 +87,11 @@ static inline bool five_simd_ht16k33_busses_program_send_byte(
     uint8_t const x3,
     uint8_t const x4)
 {
-    uint32_t const nibble_set_lo = (spread_nibble_by_five((x0 & 0x0f) >> 0) << 0)
-                                 | (spread_nibble_by_five((x1 & 0x0f) >> 0) << 1)
-                                 | (spread_nibble_by_five((x2 & 0x0f) >> 0) << 2)
-                                 | (spread_nibble_by_five((x3 & 0x0f) >> 0) << 3)
-                                 | (spread_nibble_by_five((x4 & 0x0f) >> 0) << 4);
+    if (pio_sm_is_tx_fifo_full(pio, sm))
+    {
+        // Try again later
+        return false;
+    }
 
     uint32_t const nibble_set_hi = (spread_nibble_by_five((x0 & 0xf0) >> 4) << 0)
                                  | (spread_nibble_by_five((x1 & 0xf0) >> 4) << 1)
@@ -78,49 +99,51 @@ static inline bool five_simd_ht16k33_busses_program_send_byte(
                                  | (spread_nibble_by_five((x3 & 0xf0) >> 4) << 3)
                                  | (spread_nibble_by_five((x4 & 0xf0) >> 4) << 4);
 
-    pio_sm_put_blocking(pio, sm, ~nibble_set_hi << 12);
-    pio_sm_put_blocking(pio, sm, ~nibble_set_lo << 12);
-    uint32_t const ack_batch = pio_sm_get_blocking(pio, sm);
-    return ack_batch == 0;
+    pio_sm_put(pio, sm, ~nibble_set_hi << 12);
+    return true;
 }
 
-static inline bool five_simd_ht16k33_busses_program_send_command(
+static inline bool five_simd_ht16k33_busses_program_try_send_nibble_2(
     PIO pio,
     uint sm,
-    uint8_t const addr,
-    bool const write,
-    size_t const cmd_length,
-    uint8_t const * const cmd0,
-    uint8_t const * const cmd1,
-    uint8_t const * const cmd2,
-    uint8_t const * const cmd3,
-    uint8_t const * const cmd4)
+    uint8_t const x0,
+    uint8_t const x1,
+    uint8_t const x2,
+    uint8_t const x3,
+    uint8_t const x4)
 {
-    bool success = true;
-
-    pio_sm_put_blocking(pio, sm, cmd_length);
-
-    uint8_t const addr_with_write = (addr << 1) | (write ? 0 : 1);
-    success &= five_simd_ht16k33_busses_program_send_byte(pio,
-                                                          sm,
-                                                          addr_with_write,
-                                                          addr_with_write,
-                                                          addr_with_write,
-                                                          addr_with_write,
-                                                          addr_with_write);
-
-    for (size_t i = 0; i < cmd_length; ++i)
+    if (pio_sm_is_tx_fifo_full(pio, sm))
     {
-        success &= five_simd_ht16k33_busses_program_send_byte(pio,
-                                                              sm,
-                                                              *(cmd0 + i),
-                                                              *(cmd1 + i),
-                                                              *(cmd2 + i),
-                                                              *(cmd3 + i),
-                                                              *(cmd4 + i));
+        // Try again later
+        return false;
     }
 
-    return success;
+    uint32_t const nibble_set_lo = (spread_nibble_by_five((x0 & 0x0f) >> 0) << 0)
+                                 | (spread_nibble_by_five((x1 & 0x0f) >> 0) << 1)
+                                 | (spread_nibble_by_five((x2 & 0x0f) >> 0) << 2)
+                                 | (spread_nibble_by_five((x3 & 0x0f) >> 0) << 3)
+                                 | (spread_nibble_by_five((x4 & 0x0f) >> 0) << 4);
+
+    pio_sm_put(pio, sm, ~nibble_set_lo << 12);
+    return true;
+}
+
+/* Returns true if all acks should have been received by now.
+ * Sets all_acks_received to true if they were received. */
+static inline bool five_simd_ht16k33_busses_program_try_get_acks(
+    PIO pio,
+    uint sm,
+    bool & all_acks_received)
+{
+    if (pio_sm_is_rx_fifo_empty(pio, sm))
+    {
+        // Try again later
+        return false;
+    }
+
+    uint32_t const ack_batch = pio_sm_get(pio, sm);
+    all_acks_received = ack_batch == 0;
+    return true;
 }
 
 static inline void five_simd_ht16k33_busses_program_init(PIO pio, uint sm, uint offset, double baud_rate, uint clock_pin, uint first_of_five_consecutive_data_pins)

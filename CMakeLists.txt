@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
-add_compile_options(-Wall -Wextra -Werror)
+add_compile_options(-Wall -Wextra -Werror -Wno-format-truncation)
 
 include(pico_sdk_import.cmake)
 
@@ -12,6 +12,8 @@ add_executable(gps_clock
     gps_clock.cpp
     time.cpp
     util.cpp
+    FiveSimdHt16k33Busses.cpp
+    Display.cpp
 )
 
 pico_enable_stdio_usb(gps_clock 1)

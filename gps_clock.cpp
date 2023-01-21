@@ -1,19 +1,5 @@
 /*
- * 5 groups of 16 characters (8 dual character modules and 8 HT16K33 chips):
- * 3210FEDCBA9876543210  1
- * 7654FEDCBA9876543210  2
- * BA98FEDCBA9876543210  3
- * FEDCFEDCBA9876543210  4
- *    5
- *
- * PST YYYYMMDDhhmmssHH
- * UTC YYYYMMDDhhmmssHH
- * TAI YYYYMMDDhhmmssHH
- * AREA OF GENERIC TEXT
- *
- * Need to write a PIO program that will operate 5 I2C interfaces simultaneously, in a SIMD fashion.
- *
- * Need to make the time update 100 times per second
+ * Need to make the time update 10 times per second
  *
  * Use this to buffer from PPS line to PPS LED
  * https://www.digikey.com/en/products/detail/diodes-incorporated/74LVC1G17W5-7/3829445
@@ -47,10 +33,12 @@
 #include "pico/multicore.h"
 
 #include "pps.pio.h"
-#include "five_simd_ht16k33_busses.pio.h"
 
 #include "util.h"
 #include "time.h"
+
+#include "FiveSimdHt16k33Busses.h"
+#include "Display.h"
 
 class GpioOut
 {
@@ -953,216 +941,6 @@ void GpsUBlox::update()
     }
 }
 
-class Ht16k33
-{
-public:
-    Ht16k33(PIO pio, uint const clock_pin, uint const first_of_five_consecutive_data_pins);
-
-    bool initialized_successfully() const
-    {
-        return _initialized_successfully;
-    }
-
-    bool send_image(uint32_t image);
-    bool send_chars(char left_char, bool left_dot, char right_char, bool right_dot);
-
-    /* valid values range from 0 to 15 inclusive. */
-    bool set_brightness(uint8_t pulse_width);
-
-private:
-    bool _initialized_successfully = false;
-
-    static constexpr uint8_t _addr = 0x70;
-    static constexpr size_t _image_size = 4;
-
-    bool _send_1_byte_cmd(uint8_t cmd);
-    bool _send_image(uint8_t const * image);
-    uint32_t _char_to_image(char c);
-    uint32_t _dot_to_image(bool dot);
-
-    PIO _pio;
-    uint _sm;
-};
-
-Ht16k33::Ht16k33(PIO pio, uint const clock_pin, uint const first_of_five_consecutive_data_pins):
-    _pio(pio)
-{
-    uint offset = pio_add_program(_pio, &five_simd_ht16k33_busses_program);
-    _sm = pio_claim_unused_sm(_pio, true);
-    five_simd_ht16k33_busses_program_init(_pio, _sm, offset, 400000, clock_pin, first_of_five_consecutive_data_pins);
-
-    sleep_ms(1000);
-
-    // Enable internal system clock
-    if (!_send_1_byte_cmd(0x21))
-    {
-        printf("HT16K33 Failed to enable internal system clock.\n");
-        return;
-    }
-
-    // Set brightness
-    if (!set_brightness(0))
-    {
-        printf("HT16K33 Failed to set brightness.\n");
-        return;
-    }
-
-    // Display on, no blinking
-    if (!_send_1_byte_cmd(0x81))
-    {
-        printf("HT16K33 Failed to activate display without blinking.\n");
-        return;
-    }
-
-    // Set test image
-    uint8_t image[_image_size] = {0x55, 0x55, 0xaa, 0xaa};
-    if (!_send_image(image))
-    {
-        printf("HT16K33 Failed to send test image.\n");
-        return;
-    }
-
-    _initialized_successfully = true;
-}
-
-bool Ht16k33::set_brightness(uint8_t pulse_width)
-{
-    if (pulse_width > 0xf)
-    {
-        return false;
-    }
-    return _send_1_byte_cmd(0xe0 | pulse_width);
-}
-
-bool Ht16k33::_send_1_byte_cmd(uint8_t cmd)
-{
-    return five_simd_ht16k33_busses_program_send_command(_pio, _sm, _addr, true, 1, &cmd, &cmd, &cmd, &cmd, &cmd);
-}
-
-bool Ht16k33::_send_image(uint8_t const * image)
-{
-    uint8_t cmd[_image_size + 1];
-    cmd[0] = 0x00;
-    for (size_t i = 1; i <= _image_size; ++i)
-    {
-        cmd[i] = image[i-1];
-    }
-    return five_simd_ht16k33_busses_program_send_command(_pio, _sm, _addr, true, _image_size + 1, &cmd[0], &cmd[0], &cmd[0], &cmd[0], &cmd[0]);
-}
-
-bool Ht16k33::send_image(uint32_t image)
-{
-    uint8_t image_bytes[4];
-    image_bytes[0] = (image >>  0) & 0xff;
-    image_bytes[1] = (image >>  8) & 0xff;
-    image_bytes[2] = (image >> 16) & 0xff;
-    image_bytes[3] = (image >> 24) & 0xff;
-    return _send_image(&image_bytes[0]);
-}
-
-bool Ht16k33::send_chars(char left_char, bool left_dot, char right_char, bool right_dot)
-{
-    uint32_t image = 0;
-    image |= _char_to_image(left_char);
-    image |= _dot_to_image(left_dot);
-    image <<= 16;
-    image |= _char_to_image(right_char);
-    image |= _dot_to_image(right_dot);
-    return send_image(image);
-}
-
-
-uint32_t Ht16k33::_char_to_image(char ch)
-{
-    /* -----A-----
-     * |\   |   /|
-     * | \  |  / |
-     * B  C D E  F
-     * |   \|/   |
-     * *-G--*--H-*
-     * |   /|\   |
-     * I  J K L  M
-     * | /  |  \ |
-     * |/   |   \|
-     * -----N----- */
-
-    uint32_t constexpr a = 0x0020;
-    uint32_t constexpr b = 0x0001;
-    uint32_t constexpr c = 0x0002;
-    uint32_t constexpr d = 0x0004;
-    uint32_t constexpr e = 0x0008;
-    uint32_t constexpr f = 0x0040;
-    uint32_t constexpr g = 0x0010;
-    uint32_t constexpr h = 0x0400;
-    uint32_t constexpr i = 0x4000;
-    uint32_t constexpr j = 0x2000;
-    uint32_t constexpr k = 0x1000;
-    uint32_t constexpr l = 0x0800;
-    uint32_t constexpr m = 0x0080;
-    uint32_t constexpr n = 0x0200;
-
-    uint32_t constexpr letters[26] = {
-        /* a */ a|b|f|g|h|i|m,
-        /* b */ a|d|f|h|k|m|n,
-        /* c */ a|b|i|n,
-        /* d */ a|d|f|k|m|n,
-        /* e */ a|b|g|h|i|n,
-        /* f */ a|b|g|h|i,
-        /* g */ a|b|h|i|m|n,
-        /* h */ b|f|g|h|i|m,
-        /* i */ a|d|k|n,
-        /* j */ f|i|m|n,
-        /* k */ b|e|g|i|l,
-        /* l */ b|i|n,
-        /* m */ b|c|e|f|i|m,
-        /* n */ b|c|f|i|l|m,
-        /* o */ a|b|f|i|m|n,
-        /* p */ a|b|f|g|h|i,
-        /* q */ a|b|f|i|l|m|n,
-        /* r */ a|b|f|g|h|i|l,
-        /* s */ a|b|g|h|m|n,
-        /* t */ a|d|k,
-        /* u */ b|f|i|m|n,
-        /* v */ b|e|i|j,
-        /* w */ b|f|i|j|l|m,
-        /* x */ c|e|j|l,
-        /* y */ c|e|k,
-        /* z */ a|e|j|n,
-    };
-
-    uint32_t constexpr digits[10] = {
-        /* 0 */ a|b|e|f|i|j|m|n,
-        /* 1 */ f|m,
-        /* 2 */ a|f|g|h|i|n,
-        /* 3 */ a|f|h|m|n,
-        /* 4 */ b|f|g|h|m,
-        /* 5 */ a|b|g|h|m|n,
-        /* 6 */ b|g|h|i|m|n,
-        /* 7 */ a|e|j,
-        /* 8 */ a|b|f|g|h|i|m|n,
-        /* 9 */ a|b|f|g|h|m,
-    };
-
-    if ('a' <= ch && ch <= 'z')
-    {
-        return letters[ch - 'a'];
-    }
-    if ('A' <= ch && ch <= 'Z')
-    {
-        return letters[ch - 'A'];
-    }
-    if ('0' <= ch && ch <= '9')
-    {
-        return digits[ch - '0'];
-    }
-    return 0x0000;
-}
-
-uint32_t Ht16k33::_dot_to_image(bool dot)
-{
-    return dot ? 0x0100 : 0x0000;
-}
-
 bool self_test()
 {
     test_assert(util_test());
@@ -1241,23 +1019,22 @@ int main()
     bi_decl(bi_1pin_with_name(ht16k33_sda2_pin, "DISP SDA2"));
     bi_decl(bi_1pin_with_name(ht16k33_sda3_pin, "DISP SDA3"));
     bi_decl(bi_1pin_with_name(ht16k33_sda4_pin, "DISP SDA4"));
-    Ht16k33 ht16k33(pio1, ht16k33_scl_pin, ht16k33_sda0_pin);
-    if (ht16k33.initialized_successfully())
+    FiveSimdHt16k33Busses five_simd_ht16k33_busses(
+        pio1, ht16k33_scl_pin, ht16k33_sda0_pin);
+
+    Display display(five_simd_ht16k33_busses);
+    if (display.error_count() == 0)
     {
-        printf("HT16K33 init complete.\n");
+        printf("Display init complete.\n");
     }
     else
     {
-        printf("HT16K33 init FAILED.\n");
+        printf("Display init FAILED. Error count: %ld.\n", display.error_count());
     }
 
     led->on();
 
     multicore_launch_core1(core1_main);
-
-    char disp_chars[2];
-    disp_chars[0] = 'X';
-    disp_chars[1] = 'X';
 
     uint32_t prev_completed_seconds = 0;
     while (true)
@@ -1278,22 +1055,56 @@ int main()
             prev_completed_seconds = completed_seconds;
             gps->pps_pulsed();
 
-            auto result = std::to_chars(&disp_chars[0], &disp_chars[0]+sizeof(disp_chars), utc.sec);
-            if (result.ec == std::errc())
+            Display::LineOf<bool> dots;
+            dots = {
+                false, false, false, false, false,
+                false, false, false, true,  false,
+                true,  false, true,  false, false,
+                true,  false, true,  false, false,
+            };
+
+            Display::LineOf<char> line;
+            int print_result = snprintf(line.data(), line.size(), "PST  %04d%02d%02d %02d%02d%02d", loc.year, loc.month, loc.day, loc.hour, loc.min, loc.sec);
+            if (print_result != line.size()+1)
             {
-                if (result.ptr == &disp_chars[1])
-                {
-                    disp_chars[1] = disp_chars[0];
-                    disp_chars[0] = '0';
-                }
-                ht16k33.send_chars(disp_chars[0], false, disp_chars[1], false);
+                printf("Unable to format line 0 of display");
             }
-            else
+            display.write_text(0, line);
+            display.write_dots(0, dots);
+
+            print_result = snprintf(line.data(), line.size(), "UTC  %04d%02d%02d %02d%02d%02d", utc.year, utc.month, utc.day, utc.hour, utc.min, utc.sec);
+            if (print_result != line.size()+1)
             {
-                printf("Unable to format %d\n", utc.sec);
+                printf("Unable to format line 1 of display");
             }
+            display.write_text(1, line);
+            display.write_dots(1, dots);
+
+            print_result = snprintf(line.data(), line.size(), "TAI  %04d%02d%02d %02d%02d%02d", tai.year, tai.month, tai.day, tai.hour, tai.min, tai.sec);
+            if (print_result != line.size()+1)
+            {
+                printf("Unable to format line 2 of display");
+            }
+            display.write_text(2, line);
+            display.write_dots(2, dots);
+
+            print_result = snprintf(line.data(), line.size(), "Errors: %6ld %5ld", display.error_count(), gps->tops_of_seconds().error_count());
+            if (print_result != line.size()+1)
+            {
+                printf("Unable to format line 3 of display");
+            }
+            display.write_text(3, line);
+            dots = {
+                false, false, false, false, false,
+                false, false, false, false, false,
+                false, false, false, false, false,
+                false, false, false, false, false,
+            };
+            display.write_dots(3, dots);
         }
 
         gps->update();
+        five_simd_ht16k33_busses.dispatch();
+        display.dispatch();
     }
 }
