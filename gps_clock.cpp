@@ -34,54 +34,6 @@
 #include "FiveSimdHt16k33Busses.h"
 #include "Display.h"
 
-template <size_t buffer_size, size_t idx = 0>
-requires (idx <= buffer_size)
-class Pack
-{
-public:
-    inline Pack(uint8_t * const buffer): _buffer(buffer) {}
-
-    void constexpr finalize()
-    {
-        static_assert(idx == buffer_size);
-    }
-
-    template <typename T>
-    requires std::integral<T>
-    inline auto operator<<(T value)
-    {
-        to_little_endian<T>(_buffer + idx, value);
-        return Pack<buffer_size, idx + sizeof(T)>(_buffer);
-    }
-
-private:
-    uint8_t * const _buffer;
-};
-
-template <size_t buffer_size, size_t idx = 0>
-requires (idx <= buffer_size)
-class Unpack
-{
-public:
-    inline Unpack(uint8_t const * const buffer): _buffer(buffer) {}
-
-    void constexpr finalize()
-    {
-        static_assert(idx == buffer_size);
-    }
-
-    template <typename T>
-    requires std::integral<T>
-    inline auto operator>>(T & value)
-    {
-        value = from_little_endian<T>(_buffer + idx);
-        return Unpack<buffer_size, idx + sizeof(T)>(_buffer);
-    }
-
-private:
-    uint8_t const * const _buffer;
-};
-
 template <typename T, size_t size>
 class RingBuffer
 {
@@ -297,7 +249,7 @@ void GpsUBlox::_send_ubx(uint8_t const msg_class,
                          uint8_t const * const msg)
 {
     uint8_t header[6];
-    (Pack<sizeof(header)>(header)
+    (Pack<sizeof(header)>(header, LittleEndian())
         << _sync1
         << _sync2
         << msg_class
@@ -307,7 +259,7 @@ void GpsUBlox::_send_ubx(uint8_t const msg_class,
     Checksum ck;
     ck(msg_class, msg_id, msg_len, msg);
     uint8_t footer[2];
-    (Pack<sizeof(footer)>(footer)
+    (Pack<sizeof(footer)>(footer, LittleEndian())
         << ck.a
         << ck.b).finalize();
 
@@ -383,7 +335,7 @@ bool GpsUBlox::_send_ubx_cfg_prt(uint8_t const port_id,
 {
     uint8_t constexpr reserved = 0;
     uint8_t ubx_cfg_prt_msg[20];
-    (Pack<sizeof(ubx_cfg_prt_msg)>(ubx_cfg_prt_msg)
+    (Pack<sizeof(ubx_cfg_prt_msg)>(ubx_cfg_prt_msg, LittleEndian())
         << port_id
         << reserved
         << tx_ready
@@ -402,7 +354,7 @@ bool GpsUBlox::_send_ubx_cfg_msg(uint8_t const msg_class,
                                  uint8_t const rate)
 {
     uint8_t ubx_cfg_msg_msg[3];
-    (Pack<sizeof(ubx_cfg_msg_msg)>(ubx_cfg_msg_msg)
+    (Pack<sizeof(ubx_cfg_msg_msg)>(ubx_cfg_msg_msg, LittleEndian())
         << msg_class
         << msg_id
         << rate).finalize();
@@ -462,7 +414,7 @@ bool GpsUBlox::_send_ubx_cfg_tp5(uint8_t const tpIdx,
     uint8_t constexpr reserved = 0;
     uint8_t constexpr version = 0x01;
     uint8_t ubx_cfg_tp5_msg[32];
-    (Pack<sizeof(ubx_cfg_tp5_msg)>(ubx_cfg_tp5_msg)
+    (Pack<sizeof(ubx_cfg_tp5_msg)>(ubx_cfg_tp5_msg, LittleEndian())
         << tpIdx
         << version
         << reserved
@@ -617,7 +569,7 @@ void GpsUBlox::update()
 
                 uint8_t reserved;
 
-                (Unpack<len>(rx_msg)
+                (Unpack<len>(rx_msg, LittleEndian())
                     >> iTOW
                     >> year
                     >> month
@@ -708,7 +660,7 @@ void GpsUBlox::update()
                 uint16_t dateOfLsGpsDn;
                 uint8_t valid;
 
-                (Unpack<len>(rx_msg)
+                (Unpack<len>(rx_msg, LittleEndian())
                     >> iTOW
                     >> version
                     >> reserved

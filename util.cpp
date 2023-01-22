@@ -191,6 +191,81 @@ bool endian_converters()
     return true;
 }
 
+bool pack_test()
+{
+    int8_t i8 = -92;
+    uint8_t u8 = 83;
+    int16_t i16 = 29340;
+    uint16_t u16 = 48203;
+    int32_t i32 = -1482953208;
+    uint32_t u32 = 1280482521;
+    int64_t i64 = 8169285025543689661;
+    uint64_t u64 = 8393743792361950692;
+
+    uint8_t bytes[30];
+    (Pack<sizeof(bytes)>(bytes, LittleEndian())
+        << i8
+        << u8
+        << i16
+        << BigEndian()
+        << u16
+        << i32
+        << u32
+        << LittleEndian()
+        << i64
+        << u64).finalize();
+
+    int8_t ri8;
+    uint8_t ru8;
+    int16_t ri16;
+    uint16_t ru16;
+    int32_t ri32;
+    uint32_t ru32;
+    int64_t ri64;
+    uint64_t ru64;
+
+    (Unpack<sizeof(bytes)>(bytes, LittleEndian())
+        >> ri8
+        >> ru8
+        >> ri16
+        >> BigEndian()
+        >> ru16
+        >> ri32
+        >> ru32
+        >> LittleEndian()
+        >> ri64
+        >> ru64).finalize();
+
+    test_assert(i8 == ri8);
+    test_assert(u8 == ru8);
+    test_assert(i16 == ri16);
+    test_assert(u16 == ru16);
+    test_assert(i32 == ri32);
+    test_assert(u32 == ru32);
+    test_assert(i64 == ri64);
+    test_assert(u64 == ru64);
+
+    int8_t   mi8  = from_little_endian<int8_t  >(&bytes[0]);
+    uint8_t  mu8  = from_little_endian<uint8_t >(&bytes[1]);
+    int16_t  mi16 = from_little_endian<int16_t >(&bytes[2]);
+    uint16_t mu16 = from_big_endian<uint16_t>(&bytes[4]);
+    int32_t  mi32 = from_big_endian<int32_t >(&bytes[6]);
+    uint32_t mu32 = from_big_endian<uint32_t>(&bytes[10]);
+    int64_t  mi64 = from_little_endian<int64_t >(&bytes[14]);
+    uint64_t mu64 = from_little_endian<uint64_t>(&bytes[22]);
+
+    test_assert(i8 == mi8);
+    test_assert(u8 == mu8);
+    test_assert(i16 == mi16);
+    test_assert(u16 == mu16);
+    test_assert(i32 == mi32);
+    test_assert(u32 == mu32);
+    test_assert(i64 == mi64);
+    test_assert(u64 == mu64);
+
+    return true;
+}
+
 bool util_test()
 {
     #define T(S, U) test_assert(twos_complement_test<S COMMA U>())
@@ -209,6 +284,8 @@ bool util_test()
     T(int32_t, uint32_t);
     T(int64_t, uint64_t);
     #undef T
+
+    test_assert(pack_test());
 
     return true;
 }
