@@ -36,6 +36,8 @@ public:
 
     uint32_t error_count() const { return _error_count; }
 
+    void dump_to_console(bool show_dots);
+
 private:
     FiveSimdHt16k33Busses & _busses;
     bool _command_in_progress = false;

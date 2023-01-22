@@ -307,3 +307,32 @@ void Display::write_dots(size_t const line_idx, LineOf<bool> const & dots)
         }
     }
 }
+
+void Display::dump_to_console(bool show_dots)
+{
+    if (EOF == putc('\n', stdout))
+    {
+        ++_error_count;
+    }
+    for (size_t line_idx = 0; line_idx < num_lines; ++line_idx)
+    {
+        for (size_t col = 0; col < line_length; ++col)
+        {
+            if (EOF == putc(_screen_text[line_idx][col], stdout))
+            {
+                ++_error_count;
+            }
+            if (show_dots && _screen_dots[line_idx][col])
+            {
+                if (EOF == putc('.', stdout))
+                {
+                    ++_error_count;
+                }
+            }
+        }
+        if (EOF == putc('\n', stdout))
+        {
+            ++_error_count;
+        }
+    }
+}
