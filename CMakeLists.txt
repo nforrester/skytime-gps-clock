@@ -12,9 +12,11 @@ add_executable(gps_clock
     gps_clock.cpp
     time.cpp
     util.cpp
+    unit_tests.cpp
     Pps.cpp
     FiveSimdHt16k33Busses.cpp
     Display.cpp
+    packing.cpp
 )
 
 pico_enable_stdio_usb(gps_clock 1)

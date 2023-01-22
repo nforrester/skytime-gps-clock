@@ -26,6 +26,7 @@
 #include "pico/binary_info.h"
 #include "pico/multicore.h"
 
+#include "unit_tests.h"
 #include "util.h"
 #include "time.h"
 #include "packing.h"
@@ -705,14 +706,6 @@ void GpsUBlox::update()
     }
 }
 
-bool self_test()
-{
-    test_assert(util_test());
-    test_assert(time_test());
-
-    return true;
-}
-
 std::unique_ptr<Pps> pps;
 
 void core1_main()
@@ -739,7 +732,7 @@ int main()
     printf("LED init complete.\n");
 
     printf("Running self test...\n");
-    if (!self_test())
+    if (!unit_tests())
     {
         while (true)
         {

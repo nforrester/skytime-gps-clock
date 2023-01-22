@@ -4,6 +4,7 @@
 #include <limits>
 #include <cstdlib>
 #include <cstdint>
+#include <sys/types.h>
 
 bool packing_test();
 
