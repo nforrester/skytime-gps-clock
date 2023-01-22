@@ -451,8 +451,6 @@ void GpsUBlox::update()
                 bool const invalidLlh = flags3 & 0x0001;
                 uint8_t const lastCorrectionAge = (flags3 >> 1) & 0x000f;
 
-                int32_t pps_error_ns = nano;
-
                 bool const time_not_disconfirmed = (!confirmedAvai) || (confirmedDate && confirmedTime);
                 bool const time_ok = validDate && validTime && fullyResolved && time_not_disconfirmed;
                 #pragma GCC diagnostic pop
