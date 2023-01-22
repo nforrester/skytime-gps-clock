@@ -31,8 +31,8 @@ public:
 
     void dispatch();
 
-    void write_text(size_t const line_idx, LineOf<char> const & text);
-    void write_dots(size_t const line_idx, LineOf<bool> const & dots);
+    bool printf(size_t line_idx, const char *fmt, ...)
+        __attribute__ ((format (printf, 3, 4)));
 
     uint32_t error_count() const { return _error_count; }
 
@@ -44,6 +44,9 @@ private:
 
     template <typename T>
     using ScreenOf = std::array<LineOf<T>, num_lines>;
+
+    bool _set_char(size_t line_idx, size_t col, char ch);
+    bool _set_dot(size_t line_idx, size_t col, bool dot);
 
     ScreenOf<char> _screen_text;
     ScreenOf<bool> _screen_dots;

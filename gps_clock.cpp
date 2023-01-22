@@ -140,76 +140,75 @@ int main()
             prev_completed_seconds = completed_seconds;
             gps.pps_pulsed();
 
-            Display::LineOf<bool> time_dots = {
-                false, false, false, false, false,
-                false, false, false, true,  false,
-                true,  false, true,  false, false,
-                true,  false, true,  false, false,
-            };
-            Display::LineOf<bool> no_dots = {
-                false, false, false, false, false,
-                false, false, false, false, false,
-                false, false, false, false, false,
-                false, false, false, false, false,
-            };
-
-            Display::LineOf<char> line;
-            int print_result;
+            bool print_result;
             if (loc_valid)
             {
-                print_result = snprintf(line.data(), line.size(), "PST  %04d%02d%02d %02d%02d%02d", loc.year, loc.month, loc.day, loc.hour, loc.min, loc.sec);
-                display.write_dots(0, time_dots);
+                print_result = display.printf(
+                    0,
+                    "PST %04d.%02d.%02d %02d.%02d.%02d.0",
+                    loc.year,
+                    loc.month,
+                    loc.day,
+                    loc.hour,
+                    loc.min,
+                    loc.sec);
             }
             else
             {
-                print_result = snprintf(line.data(), line.size(), "PST     Initializing");
-                display.write_dots(0, no_dots);
+                print_result = display.printf(0, "PST Initializing...");
             }
-            if (print_result != line.size()+1)
+            if (!print_result)
             {
                 printf("Unable to format line 0 of display");
             }
-            display.write_text(0, line);
 
             if (utc_valid)
             {
-                print_result = snprintf(line.data(), line.size(), "UTC  %04d%02d%02d %02d%02d%02d", utc.year, utc.month, utc.day, utc.hour, utc.min, utc.sec);
-                display.write_dots(1, time_dots);
+                print_result = display.printf(
+                    1,
+                    "UTC %04d.%02d.%02d %02d.%02d.%02d.0",
+                    utc.year,
+                    utc.month,
+                    utc.day,
+                    utc.hour,
+                    utc.min,
+                    utc.sec);
             }
             else
             {
-                print_result = snprintf(line.data(), line.size(), "UTC     Initializing");
-                display.write_dots(1, no_dots);
+                print_result = display.printf(1, "UTC Initializing...");
             }
-            if (print_result != line.size()+1)
+            if (!print_result)
             {
                 printf("Unable to format line 1 of display");
             }
-            display.write_text(1, line);
 
             if (tai_valid)
             {
-                print_result = snprintf(line.data(), line.size(), "TAI  %04d%02d%02d %02d%02d%02d", tai.year, tai.month, tai.day, tai.hour, tai.min, tai.sec);
-                display.write_dots(2, time_dots);
+                print_result = display.printf(
+                    2,
+                    "TAI %04d.%02d.%02d %02d.%02d.%02d.0",
+                    tai.year,
+                    tai.month,
+                    tai.day,
+                    tai.hour,
+                    tai.min,
+                    tai.sec);
             }
             else
             {
-                print_result = snprintf(line.data(), line.size(), "TAI     Initializing");
-                display.write_dots(2, no_dots);
+                print_result = display.printf(2, "TAI Initializing...");
             }
-            if (print_result != line.size()+1)
+            if (!print_result)
             {
                 printf("Unable to format line 2 of display");
             }
-            display.write_text(2, line);
 
-            print_result = snprintf(line.data(), line.size(), "Errors: %6ld %5ld", display.error_count(), gps.tops_of_seconds().error_count());
-            if (print_result != line.size()+1)
+            print_result = display.printf(3, "Errors %6ld %6ld", display.error_count(), gps.tops_of_seconds().error_count());
+            if (!print_result)
             {
                 printf("Unable to format line 3 of display");
             }
-            display.write_text(3, line);
-            display.write_dots(3, no_dots);
 
             display.dump_to_console(true);
         }

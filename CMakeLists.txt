@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
-add_compile_options(-Wall -Wextra -Werror -Wno-format-truncation)
+add_compile_options(-Wall -Wextra -Werror)
 
 include(pico_sdk_import.cmake)
 

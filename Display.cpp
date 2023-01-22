@@ -1,6 +1,7 @@
 #include "Display.h"
 
 #include <cstdio>
+#include <cstdarg>
 
 Display::Display(FiveSimdHt16k33Busses & busses):
     _busses(busses)
@@ -81,7 +82,7 @@ Display::Display(FiveSimdHt16k33Busses & busses):
             uint8_t constexpr command = 0x21;
             if (!_busses.blocking_command(slice.address, 1, &command, &command, &command, &command, &command))
             {
-                printf("HT16K33 Failed to enable internal system clock on bus slice %02x.\n", slice.address);
+                ::printf("HT16K33 Failed to enable internal system clock on bus slice %02x.\n", slice.address);
                 ++_error_count;
             }
         }
@@ -101,7 +102,7 @@ Display::Display(FiveSimdHt16k33Busses & busses):
 
                 if (!_busses.blocking_command(slice.address, 1, &command, &command, &command, &command, &command))
                 {
-                    printf("HT16K33 Failed to set brightness on bus slice %02x.\n", slice.address);
+                    ::printf("HT16K33 Failed to set brightness on bus slice %02x.\n", slice.address);
                     ++_error_count;
                 }
             }
@@ -112,7 +113,7 @@ Display::Display(FiveSimdHt16k33Busses & busses):
             uint8_t constexpr command = 0x81;
             if (!_busses.blocking_command(slice.address, 1, &command, &command, &command, &command, &command))
             {
-                printf("HT16K33 Failed to activate display without blinking on bus slice %02x.\n", slice.address);
+                ::printf("HT16K33 Failed to activate display without blinking on bus slice %02x.\n", slice.address);
                 ++_error_count;
             }
         }
@@ -284,28 +285,108 @@ void Display::dispatch()
     }
 }
 
-void Display::write_text(size_t const line_idx, LineOf<char> const & text)
+bool Display::printf(size_t line_idx, const char *fmt, ...)
 {
-    for (size_t col = 0; col < line_length; ++col)
+    va_list args1;
+    va_start(args1, fmt);
+    va_list args2;
+    va_copy(args2, args1);
+    size_t num_chars = vsnprintf(NULL, 0, fmt, args1);
+    char buf[1 + num_chars];
+    va_end(args1);
+    vsnprintf(buf, sizeof(buf), fmt, args2);
+    va_end(args2);
+
+    size_t buf_idx = 0;
+    ssize_t col_idx = -1;
+    while (buf_idx < num_chars)
     {
-        if (_screen_text[line_idx][col] != text[col])
+        char ch = buf[buf_idx];
+        if (ch == '.')
         {
-            _screen_text[line_idx][col] = text[col];
-            _screen_updates_required[line_idx][col] = true;
+            if (!_set_char(line_idx, ++col_idx, ' '))
+            {
+                goto failure;
+            }
+            if (!_set_dot(line_idx, col_idx, true))
+            {
+                goto failure;
+            }
+        }
+        else if (char_to_image(ch) == 0 && ch != ' ')
+        {
+            goto failure;
+        }
+        else
+        {
+            if (!_set_char(line_idx, ++col_idx, ch))
+            {
+                goto failure;
+            }
+            bool dot;
+            if (buf[++buf_idx] == '.')
+            {
+                dot = true;
+                ++buf_idx;
+            }
+            else
+            {
+                dot = false;
+            }
+            if (!_set_dot(line_idx, col_idx, dot))
+            {
+                goto failure;
+            }
         }
     }
+
+    return true;
+
+    failure:
+    ++_error_count;
+    return false;
 }
 
-void Display::write_dots(size_t const line_idx, LineOf<bool> const & dots)
+bool Display::_set_char(size_t line_idx, size_t col, char ch)
 {
-    for (size_t col = 0; col < line_length; ++col)
+    if (line_idx >= _screen_text.size())
     {
-        if (_screen_dots[line_idx][col] != dots[col])
-        {
-            _screen_dots[line_idx][col] = dots[col];
-            _screen_updates_required[line_idx][col] = true;
-        }
+        return false;
     }
+
+    if (col >= _screen_text[line_idx].size())
+    {
+        return false;
+    }
+
+    if (_screen_text[line_idx][col] != ch)
+    {
+        _screen_text[line_idx][col] = ch;
+        _screen_updates_required[line_idx][col] = true;
+    }
+
+    return true;
+}
+
+bool Display::_set_dot(size_t line_idx, size_t col, bool dot)
+{
+    if (line_idx >= _screen_dots.size())
+    {
+        return false;
+    }
+
+    if (col >= _screen_dots[line_idx].size())
+    {
+        return false;
+    }
+
+    if (_screen_dots[line_idx][col] != dot)
+    {
+        _screen_dots[line_idx][col] = dot;
+        _screen_updates_required[line_idx][col] = true;
+    }
+
+    return true;
 }
 
 void Display::dump_to_console(bool show_dots)
