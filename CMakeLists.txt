@@ -17,6 +17,8 @@ add_executable(gps_clock
     FiveSimdHt16k33Busses.cpp
     Display.cpp
     packing.cpp
+    RingBuffer.cpp
+    GpsUBlox.cpp
 )
 
 pico_enable_stdio_usb(gps_clock 1)
