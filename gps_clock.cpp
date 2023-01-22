@@ -21,206 +21,18 @@
 #include <limits>
 #include <charconv>
 #include "pico/stdlib.h"
-#include "hardware/gpio.h"
 #include "hardware/uart.h"
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wvolatile"
-#include "hardware/pio.h"
-#pragma GCC diagnostic pop
 
 #include "pico/binary_info.h"
 #include "pico/multicore.h"
 
-#include "pps.pio.h"
-
 #include "util.h"
 #include "time.h"
 
+#include "Gpio.h"
+#include "Pps.h"
 #include "FiveSimdHt16k33Busses.h"
 #include "Display.h"
-
-class GpioOut
-{
-public:
-    GpioOut(uint const pin): _pin(pin)
-    {
-        gpio_init(_pin);
-        gpio_set_dir(_pin, GPIO_OUT);
-    }
-
-    void set(bool state)
-    {
-        gpio_put(_pin, state);
-        _state = state;
-    }
-
-    void on()
-    {
-        set(true);
-    }
-
-    void off()
-    {
-        set(false);
-    }
-
-    void toggle()
-    {
-        set(!_state);
-    }
-
-private:
-    uint const _pin;
-    bool _state = false;
-};
-
-std::unique_ptr<GpioOut> led;
-
-class GpioIn
-{
-public:
-    GpioIn(uint const pin): _pin(pin)
-    {
-        gpio_init(_pin);
-        gpio_set_dir(_pin, GPIO_IN);
-    }
-
-    bool get()
-    {
-        return gpio_get(_pin);
-    }
-
-private:
-    uint const _pin;
-};
-
-class Pps
-{
-public:
-    Pps(PIO pio, uint const pin): _pio(pio)
-    {
-        uint offset = pio_add_program(_pio, &pps_program);
-        _sm = pio_claim_unused_sm(_pio, true);
-        pps_program_init(_pio, _sm, offset, pin);
-    }
-
-    void update()
-    {
-        if (pps_program_second_completed(_pio, _sm))
-        {
-            _bicycles_in_last_second = pps_program_get_bicycles_in_last_complete_second(_pio, _sm);
-            ++_completed_seconds;
-        }
-
-        _completed_seconds_main_thread_a = _completed_seconds;
-        _bicycles_in_last_second_main_thread = _bicycles_in_last_second;
-        _completed_seconds_main_thread_b = _completed_seconds;
-    }
-
-    void get_status(uint32_t * completed_seconds, uint32_t * bicycles_in_last_second)
-    {
-        do
-        {
-            *completed_seconds = _completed_seconds_main_thread_a;
-            *bicycles_in_last_second = _bicycles_in_last_second_main_thread;
-        } while (*completed_seconds != _completed_seconds_main_thread_b);
-    }
-
-private:
-    PIO _pio;
-    uint _sm;
-    uint32_t _bicycles_in_last_second = 0;
-    uint32_t _completed_seconds = 0;
-
-    uint32_t volatile _completed_seconds_main_thread_a = 0;
-    uint32_t volatile _bicycles_in_last_second_main_thread = 0;
-    uint32_t volatile _completed_seconds_main_thread_b = 0;
-};
-
-std::unique_ptr<Pps> pps;
-
-template <typename T>
-requires std::unsigned_integral<T>
-inline void to_big_endian(uint8_t * bytes, T value)
-{
-    for (size_t bytes_idx = 0; bytes_idx < sizeof(T); ++bytes_idx)
-    {
-        size_t const value_idx = sizeof(T) - bytes_idx - 1;
-        bytes[bytes_idx] = (value >> (value_idx * 8)) & 0xff;
-    }
-}
-
-template <typename T>
-requires std::signed_integral<T>
-inline void to_big_endian(uint8_t * bytes, T value)
-{
-    using UT = WidthMatch<T>::u;
-    to_big_endian(bytes, unsigned_twos_complement_from_signed<UT, T>(value));
-}
-
-template <typename T>
-requires std::unsigned_integral<T>
-inline T from_big_endian(uint8_t * bytes)
-{
-    T value = 0;
-    for (ssize_t value_idx = sizeof(T) - 1; value_idx >= 0; --value_idx)
-    {
-        size_t const bytes_idx = sizeof(T) - value_idx - 1;
-        value <<= 8;
-        value |= bytes[bytes_idx];
-    }
-    return value;
-}
-
-template <typename T>
-requires std::signed_integral<T>
-inline T from_big_endian(uint8_t const * const bytes)
-{
-    using UT = WidthMatch<T>::u;
-    return signed_from_unsigned_twos_complement<UT, T>(from_big_endian<UT>(bytes));
-}
-
-template <typename T>
-requires std::unsigned_integral<T>
-inline void to_little_endian(uint8_t * bytes, T value)
-{
-    for (size_t bytes_idx = 0; bytes_idx < sizeof(T); ++bytes_idx)
-    {
-        size_t const value_idx = bytes_idx;
-        bytes[bytes_idx] = (value >> (value_idx * 8)) & 0xff;
-    }
-}
-
-template <typename T>
-requires std::signed_integral<T>
-inline void to_little_endian(uint8_t * bytes, T value)
-{
-    using UT = WidthMatch<T>::u;
-    to_little_endian(bytes, unsigned_twos_complement_from_signed<UT, T>(value));
-}
-
-template <typename T>
-requires std::unsigned_integral<T>
-inline T from_little_endian(uint8_t const * const bytes)
-{
-    T value = 0;
-    for (ssize_t value_idx = sizeof(T) - 1; value_idx >= 0; --value_idx)
-    {
-        size_t const bytes_idx = value_idx;
-        value <<= 8;
-        value |= bytes[bytes_idx];
-    }
-    return value;
-}
-
-template <typename T>
-requires std::signed_integral<T>
-inline T from_little_endian(uint8_t const * const bytes)
-{
-    using UT = WidthMatch<T>::u;
-    return signed_from_unsigned_twos_complement<UT, T>(from_little_endian<UT>(bytes));
-}
 
 template <size_t buffer_size, size_t idx = 0>
 requires (idx <= buffer_size)
@@ -949,6 +761,8 @@ bool self_test()
     return true;
 }
 
+std::unique_ptr<Pps> pps;
+
 void core1_main()
 {
     while (true)
@@ -969,7 +783,7 @@ int main()
 
     uint constexpr led_pin = 25;
     bi_decl(bi_1pin_with_name(led_pin, "LED"));
-    led = std::make_unique<GpioOut>(led_pin);
+    GpioOut led(led_pin);
     printf("LED init complete.\n");
 
     printf("Running self test...\n");
@@ -978,9 +792,9 @@ int main()
         while (true)
         {
             printf("Failed self test.\n");
-            led->on();
+            led.on();
             sleep_ms(200);
-            led->off();
+            led.off();
             sleep_ms(200);
         }
     }
@@ -1032,7 +846,7 @@ int main()
         printf("Display init FAILED. Error count: %ld.\n", display.error_count());
     }
 
-    led->on();
+    led.on();
 
     multicore_launch_core1(core1_main);
 

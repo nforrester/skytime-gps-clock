@@ -12,6 +12,7 @@ add_executable(gps_clock
     gps_clock.cpp
     time.cpp
     util.cpp
+    Pps.cpp
     FiveSimdHt16k33Busses.cpp
     Display.cpp
 )

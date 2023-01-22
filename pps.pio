@@ -27,6 +27,8 @@ check_for_high:
 
 
 % c-sdk {
+#include <limits>
+
 // Do your subtraction from this, but...
 static inline constexpr uint32_t pps_program_initial_count_effective()
 {
