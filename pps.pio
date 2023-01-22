@@ -41,7 +41,8 @@ static inline constexpr uint32_t pps_program_initial_count_actual()
     return pps_program_initial_count_effective() - 2;
 }
 
-static inline void pps_program_init(PIO pio, uint sm, uint offset, uint pps_pin) {
+static inline void pps_program_init(PIO pio, uint sm, uint offset, uint pps_pin)
+{
     pio_sm_config c = pps_program_get_default_config(offset);
 
     sm_config_set_jmp_pin(&c, pps_pin);
