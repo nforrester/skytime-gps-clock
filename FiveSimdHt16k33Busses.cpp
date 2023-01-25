@@ -30,6 +30,7 @@ void FiveSimdHt16k33Busses::dispatch()
         {
             return;
         }
+        _command_begun = true;
     }
 
     _make_progress_tx();
