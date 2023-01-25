@@ -24,49 +24,49 @@ Display::Display(FiveSimdHt16k33Busses & busses):
                     Ht16k33(3, 18),
                     Ht16k33(0, 2),
                 }),
-            SliceOfBusses(0x60, {
+            SliceOfBusses(0x71, {
                     Ht16k33(0, 16),
                     Ht16k33(1, 16),
                     Ht16k33(2, 16),
                     Ht16k33(3, 16),
                     Ht16k33(0, 0),
                 }),
-            SliceOfBusses(0x50, {
+            SliceOfBusses(0x72, {
                     Ht16k33(0, 14),
                     Ht16k33(1, 14),
                     Ht16k33(2, 14),
                     Ht16k33(3, 14),
                     Ht16k33(1, 2),
                 }),
-            SliceOfBusses(0x40, {
+            SliceOfBusses(0x73, {
                     Ht16k33(0, 12),
                     Ht16k33(1, 12),
                     Ht16k33(2, 12),
                     Ht16k33(3, 12),
                     Ht16k33(1, 0),
                 }),
-            SliceOfBusses(0x30, {
+            SliceOfBusses(0x74, {
                     Ht16k33(0, 10),
                     Ht16k33(1, 10),
                     Ht16k33(2, 10),
                     Ht16k33(3, 10),
                     Ht16k33(2, 2),
                 }),
-            SliceOfBusses(0x20, {
+            SliceOfBusses(0x75, {
                     Ht16k33(0, 8),
                     Ht16k33(1, 8),
                     Ht16k33(2, 8),
                     Ht16k33(3, 8),
                     Ht16k33(2, 0),
                 }),
-            SliceOfBusses(0x10, {
+            SliceOfBusses(0x76, {
                     Ht16k33(0, 6),
                     Ht16k33(1, 6),
                     Ht16k33(2, 6),
                     Ht16k33(3, 6),
                     Ht16k33(3, 2),
                 }),
-            SliceOfBusses(0x00, {
+            SliceOfBusses(0x77, {
                     Ht16k33(0, 4),
                     Ht16k33(1, 4),
                     Ht16k33(2, 4),
