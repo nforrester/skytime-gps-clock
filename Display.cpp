@@ -170,7 +170,7 @@ namespace
             /* p */ a|b|f|g|h|i,
             /* q */ a|b|f|i|l|m|n,
             /* r */ a|b|f|g|h|i|l,
-            /* s */ a|b|g|h|m|n,
+            /* s */ a|c|h|m|n,
             /* t */ a|d|k,
             /* u */ b|f|i|m|n,
             /* v */ b|e|i|j,
