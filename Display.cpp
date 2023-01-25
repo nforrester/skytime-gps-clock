@@ -278,6 +278,12 @@ void Display::dispatch()
                         commands[4].data()))
                 {
                     _command_in_progress = true;
+
+                    for (auto const & chip : slice.chips)
+                    {
+                        _screen_updates_required[chip.line_idx][chip.left_column] = false;
+                        _screen_updates_required[chip.line_idx][chip.left_column+1] = false;
+                    }
                 }
                 return;
             }
