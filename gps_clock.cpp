@@ -159,7 +159,7 @@ int main()
             }
             if (!print_result)
             {
-                printf("Unable to format line 0 of display");
+                printf("Unable to format line 0 of display\n");
             }
 
             if (utc_valid)
@@ -180,7 +180,7 @@ int main()
             }
             if (!print_result)
             {
-                printf("Unable to format line 1 of display");
+                printf("Unable to format line 1 of display\n");
             }
 
             if (tai_valid)
@@ -201,13 +201,13 @@ int main()
             }
             if (!print_result)
             {
-                printf("Unable to format line 2 of display");
+                printf("Unable to format line 2 of display\n");
             }
 
             print_result = display.printf(3, "Errors %6ld %6ld", display.error_count(), gps.tops_of_seconds().error_count());
             if (!print_result)
             {
-                printf("Unable to format line 3 of display");
+                printf("Unable to format line 3 of display\n");
             }
 
             display.dump_to_console(true);

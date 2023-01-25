@@ -312,6 +312,7 @@ bool Display::printf(size_t line_idx, const char *fmt, ...)
             {
                 goto failure;
             }
+            ++buf_idx;
         }
         else if (char_to_image(ch) == 0 && ch != ' ')
         {
@@ -337,6 +338,18 @@ bool Display::printf(size_t line_idx, const char *fmt, ...)
             {
                 goto failure;
             }
+        }
+    }
+
+    while (++col_idx < static_cast<ssize_t>(_screen_text[0].size()))
+    {
+        if (!_set_char(line_idx, col_idx, ' '))
+        {
+            goto failure;
+        }
+        if (!_set_dot(line_idx, col_idx, false))
+        {
+            goto failure;
         }
     }
 
