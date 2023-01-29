@@ -37,6 +37,23 @@ public:
         uint8_t const * const cmd3,
         uint8_t const * const cmd4);
 
+    bool begin_read(
+        uint8_t const addr,
+        size_t const num_bytes_to_read,
+        uint8_t const reg0,
+        uint8_t const reg1,
+        uint8_t const reg2,
+        uint8_t const reg3,
+        uint8_t const reg4);
+
+    bool try_end_read(
+        bool & success,
+        uint8_t * const data0,
+        uint8_t * const data1,
+        uint8_t * const data2,
+        uint8_t * const data3,
+        uint8_t * const data4);
+
 private:
     static size_t constexpr max_bytes = max_cmd_length + 1;
 
@@ -65,6 +82,11 @@ private:
     bool _operation_begun;
     bool _operation_ended;
 
+    size_t _bytes_to_read_after_this_operation_is_complete;
+    bool _write_preceeding_read_worked;
+
     void _make_progress_tx();
     void _make_progress_rx();
+
+    void _try_begin_read_part_2();
 };

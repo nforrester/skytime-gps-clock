@@ -21,6 +21,9 @@ FiveSimdHt16k33Busses::FiveSimdHt16k33Busses(PIO pio, uint const clock_pin, uint
 
     _operation_begun = true;
     _operation_ended = true;
+
+    _bytes_to_read_after_this_operation_is_complete = 0;
+    _write_preceeding_read_worked = false;
 }
 
 void FiveSimdHt16k33Busses::dispatch()
@@ -36,6 +39,7 @@ void FiveSimdHt16k33Busses::dispatch()
 
     _make_progress_tx();
     _make_progress_rx();
+    _try_begin_read_part_2();
 }
 
 void FiveSimdHt16k33Busses::_make_progress_tx()
@@ -139,6 +143,27 @@ void FiveSimdHt16k33Busses::_make_progress_rx()
     }
 }
 
+bool FiveSimdHt16k33Busses::blocking_write(
+    uint8_t const addr,
+    size_t const cmd_length,
+    uint8_t const * const cmd0,
+    uint8_t const * const cmd1,
+    uint8_t const * const cmd2,
+    uint8_t const * const cmd3,
+    uint8_t const * const cmd4)
+{
+    bool success = false;
+    while (!begin_write(addr, cmd_length, cmd0, cmd1, cmd2, cmd3, cmd4))
+    {
+        dispatch();
+    }
+    while (!try_end_write(success))
+    {
+        dispatch();
+    }
+    return success;
+}
+
 bool FiveSimdHt16k33Busses::begin_write(
     uint8_t const addr,
     size_t const cmd_length,
@@ -188,6 +213,8 @@ bool FiveSimdHt16k33Busses::begin_write(
     _operation_begun = false;
     _operation_ended = false;
 
+    _bytes_to_read_after_this_operation_is_complete = 0;
+
     return true;
 }
 
@@ -208,23 +235,105 @@ bool FiveSimdHt16k33Busses::try_end_write(bool & success)
     return true;
 }
 
-bool FiveSimdHt16k33Busses::blocking_write(
+bool FiveSimdHt16k33Busses::begin_read(
     uint8_t const addr,
-    size_t const cmd_length,
-    uint8_t const * const cmd0,
-    uint8_t const * const cmd1,
-    uint8_t const * const cmd2,
-    uint8_t const * const cmd3,
-    uint8_t const * const cmd4)
+    size_t const num_bytes_to_read,
+    uint8_t const reg0,
+    uint8_t const reg1,
+    uint8_t const reg2,
+    uint8_t const reg3,
+    uint8_t const reg4)
 {
-    bool success = false;
-    while (!begin_write(addr, cmd_length, cmd0, cmd1, cmd2, cmd3, cmd4))
+    if (!begin_write(addr, 1, &reg0, &reg1, &reg2, &reg3, &reg4))
     {
-        dispatch();
+        return false;
     }
-    while (!try_end_write(success))
+
+    _bytes_to_read_after_this_operation_is_complete = num_bytes_to_read;
+    return true;
+}
+
+void FiveSimdHt16k33Busses::_try_begin_read_part_2()
+{
+    if (_bytes_to_read_after_this_operation_is_complete == 0)
     {
-        dispatch();
+        return;
     }
-    return success;
+
+    if (!try_end_write(_write_preceeding_read_worked))
+    {
+        return;
+    }
+
+    // This could go wrong if there was interference on the bus during the preceeding write operation,
+    // but it saves a separate variable to remember the address.
+    uint8_t const addr_with_write = 1 | _data_buffer0[0];
+
+    _data_buffer0[0] = addr_with_write;
+    _data_buffer1[0] = addr_with_write;
+    _data_buffer2[0] = addr_with_write;
+    _data_buffer3[0] = addr_with_write;
+    _data_buffer4[0] = addr_with_write;
+    _acks_to_transmit[0] = false;
+    _acks_expected[0] = true;
+
+    for (size_t i = 0; i < _bytes_to_read_after_this_operation_is_complete; ++i)
+    {
+        _data_buffer0[i+1] = 0;
+        _data_buffer1[i+1] = 0;
+        _data_buffer2[i+1] = 0;
+        _data_buffer3[i+1] = 0;
+        _data_buffer4[i+1] = 0;
+        _acks_to_transmit[i+1] = true;
+        _acks_expected[i+1] = true;
+    }
+    _acks_to_transmit[_bytes_to_read_after_this_operation_is_complete] = false;
+    _acks_expected[_bytes_to_read_after_this_operation_is_complete] = false;
+
+    _cmd_length = _bytes_to_read_after_this_operation_is_complete;
+
+    _bytes_to_transmit = _bytes_to_read_after_this_operation_is_complete + 1;
+    _bytes_and_ack_batches_transmitted = 0;
+    _bytes_and_ack_batches_received = 0;
+    _all_acks_match_expectation = true;
+
+    _nibbles_plus_acks_transmitted = 0;
+    _nibbles_plus_acks_received = 0;
+
+    _operation_begun = false;
+    _operation_ended = false;
+
+    _bytes_to_read_after_this_operation_is_complete = 0;
+}
+
+bool FiveSimdHt16k33Busses::try_end_read(
+    bool & success,
+    uint8_t * const data0,
+    uint8_t * const data1,
+    uint8_t * const data2,
+    uint8_t * const data3,
+    uint8_t * const data4)
+{
+    if (_operation_ended)
+    {
+        return false;
+    }
+
+    if (_bytes_and_ack_batches_received != _bytes_to_transmit)
+    {
+        return false;
+    }
+
+    for (size_t i = 0; i < _cmd_length; ++i)
+    {
+        *(data0+i) = _data_buffer0[i+1];
+        *(data1+i) = _data_buffer1[i+1];
+        *(data2+i) = _data_buffer2[i+1];
+        *(data3+i) = _data_buffer3[i+1];
+        *(data4+i) = _data_buffer4[i+1];
+    }
+
+    success = _all_acks_match_expectation && _write_preceeding_read_worked;
+    _operation_ended = true;
+    return true;
 }
