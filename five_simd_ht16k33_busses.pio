@@ -24,18 +24,20 @@ begin_byte:
 begin_nibble:
     pull block             side 0      // Pull 4 bits (1 nibble) into the OSR (4 bits * five busses = 20 bits, wasting 12 bits)
     out pindirs, nbusses   side 0 [13] // Write a bit to each bus
-    nop                    side 1 [15] // Allow bit to be read
+    in pins, nbusses       side 1 [15] // Read a bit from each bus
     nop                    side 0
     out pindirs, nbusses   side 0 [14] // Write a bit to each bus
-    nop                    side 1 [15] // Allow bit to be read
+    in pins, nbusses       side 1 [15] // Read a bit from each bus
     nop                    side 0
     out pindirs, nbusses   side 0 [14] // Write a bit to each bus
-    nop                    side 1 [15] // Allow bit to be read
+    in pins, nbusses       side 1 [15] // Read a bit from each bus
     nop                    side 0
     out pindirs, nbusses   side 0 [14] // Write a bit to each bus
-    nop                    side 1 [15] // Allow bit to be read
+    in pins, nbusses       side 1      // Read a bit from each bus
+    push block             side 1 [14] // Push 4 bits (1 nibble) into the OSR (4 bits * five busses = 20 bits, wasting 12 bits)
     jmp y-- begin_nibble   side 0
-    set pindirs, 0         side 0 [14] // Prepare for acknowledge
+    pull block             side 0      // Pull ACKs/NACKs for this byte.
+    out pindirs, nbusses   side 0 [13] // Write ACKs/NACKs for this byte.
     nop                    side 1
     in pins, nbusses       side 1 [13] // Receive acknowledges into ISR
     push block             side 1      // Push acknowledges for this byte.
@@ -46,6 +48,7 @@ begin_nibble:
 .wrap
 
 % c-sdk {
+#include <limits>
 
 static inline uint32_t spread_nibble_by_five(uint32_t nibble)
 {
@@ -55,6 +58,16 @@ static inline uint32_t spread_nibble_by_five(uint32_t nibble)
     spread |= (nibble & 0x4) << 8;
     spread |= (nibble & 0x8) << 12;
     return spread;
+}
+
+static inline uint32_t condense_nibble_by_five(uint32_t nibble)
+{
+    uint32_t condensed = 0;
+    condensed |= (nibble & 0x1) >> 0;
+    condensed |= (nibble & 0x20) >> 4;
+    condensed |= (nibble & 0x400) >> 8;
+    condensed |= (nibble & 0x8000) >> 12;
+    return condensed;
 }
 
 static inline bool five_simd_ht16k33_busses_program_try_begin_command(
@@ -72,10 +85,14 @@ static inline bool five_simd_ht16k33_busses_program_try_begin_command(
     return true;
 }
 
-/* These three functions need to be called in sequence to send a complete byte. Each should be called repeatedly until it returns true.
+/* These three functions need to be called in sequence to send or receive a complete byte.
+ * Each should be called repeatedly until it returns true.
  *
  * five_simd_ht16k33_busses_program_try_send_nibble_1(),
+ * five_simd_ht16k33_busses_program_try_get_nibble_1(),
  * five_simd_ht16k33_busses_program_try_send_nibble_2(),
+ * five_simd_ht16k33_busses_program_try_get_nibble_2(),
+ * five_simd_ht16k33_busses_program_try_send_acks()
  * five_simd_ht16k33_busses_program_try_get_acks()
  */
 static inline bool five_simd_ht16k33_busses_program_try_send_nibble_1(
@@ -128,12 +145,93 @@ static inline bool five_simd_ht16k33_busses_program_try_send_nibble_2(
     return true;
 }
 
+static inline bool five_simd_ht16k33_busses_program_try_get_nibble_1(
+    PIO pio,
+    uint sm,
+    uint8_t & x0,
+    uint8_t & x1,
+    uint8_t & x2,
+    uint8_t & x3,
+    uint8_t & x4)
+{
+    if (pio_sm_is_rx_fifo_empty(pio, sm))
+    {
+        // Try again later
+        return false;
+    }
+
+    uint32_t const nibble_get_hi = pio_sm_get(pio, sm);
+
+    x0 &= 0x0f;
+    x1 &= 0x0f;
+    x2 &= 0x0f;
+    x3 &= 0x0f;
+    x4 &= 0x0f;
+
+    x0 |= condense_nibble_by_five(nibble_get_hi >> 0) << 4;
+    x1 |= condense_nibble_by_five(nibble_get_hi >> 1) << 4;
+    x2 |= condense_nibble_by_five(nibble_get_hi >> 2) << 4;
+    x3 |= condense_nibble_by_five(nibble_get_hi >> 3) << 4;
+    x4 |= condense_nibble_by_five(nibble_get_hi >> 4) << 4;
+
+    return true;
+}
+
+static inline bool five_simd_ht16k33_busses_program_try_get_nibble_2(
+    PIO pio,
+    uint sm,
+    uint8_t & x0,
+    uint8_t & x1,
+    uint8_t & x2,
+    uint8_t & x3,
+    uint8_t & x4)
+{
+    if (pio_sm_is_rx_fifo_empty(pio, sm))
+    {
+        // Try again later
+        return false;
+    }
+
+    uint32_t const nibble_get_lo = pio_sm_get(pio, sm);
+
+    x0 &= 0xf0;
+    x1 &= 0xf0;
+    x2 &= 0xf0;
+    x3 &= 0xf0;
+    x4 &= 0xf0;
+
+    x0 |= condense_nibble_by_five(nibble_get_lo >> 0) << 0;
+    x1 |= condense_nibble_by_five(nibble_get_lo >> 1) << 0;
+    x2 |= condense_nibble_by_five(nibble_get_lo >> 2) << 0;
+    x3 |= condense_nibble_by_five(nibble_get_lo >> 3) << 0;
+    x4 |= condense_nibble_by_five(nibble_get_lo >> 4) << 0;
+
+    return true;
+}
+
+static inline bool five_simd_ht16k33_busses_program_try_send_acks(
+    PIO pio,
+    uint sm,
+    bool transmit_ack) // False to receive ACK instead.
+{
+    if (pio_sm_is_tx_fifo_full(pio, sm))
+    {
+        // Try again later
+        return false;
+    }
+
+    pio_sm_put(pio, sm, (transmit_ack ? std::numeric_limits<uint32_t>::max() : 0));
+
+    return true;
+}
+
 /* Returns true if all acks should have been received by now.
  * Sets all_acks_received to true if they were received. */
 static inline bool five_simd_ht16k33_busses_program_try_get_acks(
     PIO pio,
     uint sm,
-    bool & all_acks_received)
+    bool expect_ack,
+    bool & all_acks_match_expectation)
 {
     if (pio_sm_is_rx_fifo_empty(pio, sm))
     {
@@ -142,7 +240,11 @@ static inline bool five_simd_ht16k33_busses_program_try_get_acks(
     }
 
     uint32_t const ack_batch = pio_sm_get(pio, sm);
-    all_acks_received = ack_batch == 0;
+    all_acks_match_expectation = ack_batch == (expect_ack ? 0: 0x1f);
+    if (!all_acks_match_expectation)
+    {
+        printf("Actual acks: 0x%lx\n", ack_batch);
+    }
     return true;
 }
 

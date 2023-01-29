@@ -80,7 +80,7 @@ Display::Display(FiveSimdHt16k33Busses & busses):
         // Enable internal system clock
         {
             uint8_t constexpr command = 0x21;
-            if (!_busses.blocking_command(slice.address, 1, &command, &command, &command, &command, &command))
+            if (!_busses.blocking_write(slice.address, 1, &command, &command, &command, &command, &command))
             {
                 ::printf("HT16K33 Failed to enable internal system clock on bus slice %02x.\n", slice.address);
                 ++_error_count;
@@ -100,7 +100,7 @@ Display::Display(FiveSimdHt16k33Busses & busses):
             {
                 uint8_t constexpr command = 0xe0 | pulse_width;
 
-                if (!_busses.blocking_command(slice.address, 1, &command, &command, &command, &command, &command))
+                if (!_busses.blocking_write(slice.address, 1, &command, &command, &command, &command, &command))
                 {
                     ::printf("HT16K33 Failed to set brightness on bus slice %02x.\n", slice.address);
                     ++_error_count;
@@ -111,7 +111,7 @@ Display::Display(FiveSimdHt16k33Busses & busses):
         // Display on, no blinking
         {
             uint8_t constexpr command = 0x81;
-            if (!_busses.blocking_command(slice.address, 1, &command, &command, &command, &command, &command))
+            if (!_busses.blocking_write(slice.address, 1, &command, &command, &command, &command, &command))
             {
                 ::printf("HT16K33 Failed to activate display without blinking on bus slice %02x.\n", slice.address);
                 ++_error_count;
@@ -219,7 +219,7 @@ void Display::dispatch()
     if (_command_in_progress)
     {
         bool success;
-        if (_busses.try_end_command(success))
+        if (_busses.try_end_write(success))
         {
             _command_in_progress = false;
             if (!success)
@@ -268,7 +268,7 @@ void Display::dispatch()
                     commands[bus][4] = (left_image  >> 8) & 0xff;
                 }
 
-                if (_busses.begin_command(
+                if (_busses.begin_write(
                         slice.address,
                         commands[0].size(),
                         commands[0].data(),
