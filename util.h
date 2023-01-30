@@ -23,3 +23,62 @@ inline T nwraps(T a, T b)
 {
     return (a - mod(a, b)) / b;
 }
+
+template <typename T, size_t size>
+concept IsWidth = sizeof(T) == size;
+
+template <typename T>
+class WidthMatch
+{
+};
+
+template <typename T>
+requires std::integral<T> && IsWidth<T, 8>
+class WidthMatch<T>
+{
+public:
+    using u = uint64_t;
+    using s = int64_t;
+};
+
+template <typename T>
+requires std::integral<T> && IsWidth<T, 4>
+class WidthMatch<T>
+{
+public:
+    using u = uint32_t;
+    using s = int32_t;
+};
+
+template <typename T>
+requires std::integral<T> && IsWidth<T, 2>
+class WidthMatch<T>
+{
+public:
+    using u = uint16_t;
+    using s = int16_t;
+};
+
+template <typename T>
+requires std::integral<T> && IsWidth<T, 1>
+class WidthMatch<T>
+{
+public:
+    using u = uint8_t;
+    using s = int8_t;
+};
+
+template <std::unsigned_integral U>
+inline WidthMatch<U>::s signed_difference(U a, U b)
+{
+    using S = WidthMatch<U>::s;
+
+    if (a >= b)
+    {
+        return static_cast<S>(a - b);
+    }
+    else
+    {
+        return static_cast<S>(b - a) * -1;
+    }
+}

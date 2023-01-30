@@ -44,6 +44,12 @@ public:
         _w_idx = (_w_idx + 1) % _data_len;
     }
 
+    inline void clear()
+    {
+        _r_idx = 0;
+        _w_idx = 0;
+    }
+
 private:
     static constexpr size_t _data_len = max_elements + 1;
     T _data[_data_len];

@@ -40,7 +40,7 @@ void core1_main()
 {
     while (true)
     {
-        pps->dispatch();
+        pps->dispatch_fast_thread();
     }
 }
 
@@ -138,8 +138,7 @@ int main()
     uint32_t prev_completed_seconds = 0;
     while (true)
     {
-        uint32_t completed_seconds, bicycles_in_last_second;
-        pps->get_status(&completed_seconds, &bicycles_in_last_second);
+        uint32_t completed_seconds = pps->get_completed_seconds();
         if (completed_seconds != prev_completed_seconds)
         {
             Ymdhms const & utc = gps.tops_of_seconds().next().utc_ymdhms;
@@ -231,5 +230,6 @@ int main()
         five_simd_ht16k33_busses.dispatch();
         display.dispatch();
         buttons.dispatch();
+        pps->dispatch_main_thread();
     }
 }

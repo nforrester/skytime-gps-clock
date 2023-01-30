@@ -6,52 +6,9 @@
 #include <cstdint>
 #include <sys/types.h>
 
+#include "util.h"
+
 bool packing_test();
-
-template <typename T, size_t size>
-concept IsWidth = sizeof(T) == size;
-
-template <typename T>
-class WidthMatch
-{
-};
-
-template <typename T>
-requires std::integral<T> && IsWidth<T, 8>
-class WidthMatch<T>
-{
-public:
-    using u = uint64_t;
-    using s = int64_t;
-};
-
-template <typename T>
-requires std::integral<T> && IsWidth<T, 4>
-class WidthMatch<T>
-{
-public:
-    using u = uint32_t;
-    using s = int32_t;
-};
-
-template <typename T>
-requires std::integral<T> && IsWidth<T, 2>
-class WidthMatch<T>
-{
-public:
-    using u = uint16_t;
-    using s = int16_t;
-};
-
-template <typename T>
-requires std::integral<T> && IsWidth<T, 1>
-class WidthMatch<T>
-{
-public:
-    using u = uint8_t;
-    using s = int8_t;
-};
-
 
 template <typename U, typename S>
 requires std::same_as<U, typename WidthMatch<S>::u>
