@@ -10,7 +10,7 @@
 class FiveSimdHt16k33Busses
 {
 public:
-    static size_t constexpr max_cmd_length = 5;
+    static size_t constexpr max_cmd_length = 17;
 
     FiveSimdHt16k33Busses(PIO pio, uint const clock_pin, uint const first_of_five_consecutive_data_pins);
 

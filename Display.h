@@ -22,7 +22,7 @@ class Display
 {
 public:
     static size_t constexpr line_length = 20;
-    static size_t constexpr num_lines = 4;
+    static size_t constexpr num_lines = 5;
 
     template <typename T>
     using LineOf = std::array<T, line_length>;
@@ -56,14 +56,16 @@ private:
     {
         Ht16k33(){}
 
-        Ht16k33(size_t line_idx_, size_t left_column_):
+        Ht16k33(size_t line_idx_, size_t left_column_, size_t n_columns_):
             line_idx(line_idx_),
-            left_column(left_column_)
+            left_column(left_column_),
+            n_columns(n_columns_)
         {
         }
 
         size_t line_idx;
         size_t left_column;
+        size_t n_columns;
     };
 
     struct SliceOfBusses
@@ -81,7 +83,7 @@ private:
         std::array<Ht16k33, 5> chips;
     };
 
-    std::array<SliceOfBusses, 8> _slices;
+    std::array<SliceOfBusses, 3> _slices;
 
     uint32_t _error_count = 0;
 };

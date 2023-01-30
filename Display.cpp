@@ -18,60 +18,25 @@ Display::Display(FiveSimdHt16k33Busses & busses):
 
     _slices = {
             SliceOfBusses(0x70, {
-                    Ht16k33(0, 18),
-                    Ht16k33(1, 18),
-                    Ht16k33(2, 18),
-                    Ht16k33(3, 18),
-                    Ht16k33(0, 2),
+                    Ht16k33(0, 0, 8),
+                    Ht16k33(1, 0, 8),
+                    Ht16k33(2, 0, 8),
+                    Ht16k33(3, 0, 8),
+                    Ht16k33(4, 0, 8),
                 }),
             SliceOfBusses(0x71, {
-                    Ht16k33(0, 16),
-                    Ht16k33(1, 16),
-                    Ht16k33(2, 16),
-                    Ht16k33(3, 16),
-                    Ht16k33(0, 0),
+                    Ht16k33(0, 8, 8),
+                    Ht16k33(1, 8, 8),
+                    Ht16k33(2, 8, 8),
+                    Ht16k33(3, 8, 8),
+                    Ht16k33(4, 8, 8),
                 }),
             SliceOfBusses(0x72, {
-                    Ht16k33(0, 14),
-                    Ht16k33(1, 14),
-                    Ht16k33(2, 14),
-                    Ht16k33(3, 14),
-                    Ht16k33(1, 2),
-                }),
-            SliceOfBusses(0x73, {
-                    Ht16k33(0, 12),
-                    Ht16k33(1, 12),
-                    Ht16k33(2, 12),
-                    Ht16k33(3, 12),
-                    Ht16k33(1, 0),
-                }),
-            SliceOfBusses(0x74, {
-                    Ht16k33(0, 10),
-                    Ht16k33(1, 10),
-                    Ht16k33(2, 10),
-                    Ht16k33(3, 10),
-                    Ht16k33(2, 2),
-                }),
-            SliceOfBusses(0x75, {
-                    Ht16k33(0, 8),
-                    Ht16k33(1, 8),
-                    Ht16k33(2, 8),
-                    Ht16k33(3, 8),
-                    Ht16k33(2, 0),
-                }),
-            SliceOfBusses(0x76, {
-                    Ht16k33(0, 6),
-                    Ht16k33(1, 6),
-                    Ht16k33(2, 6),
-                    Ht16k33(3, 6),
-                    Ht16k33(3, 2),
-                }),
-            SliceOfBusses(0x77, {
-                    Ht16k33(0, 4),
-                    Ht16k33(1, 4),
-                    Ht16k33(2, 4),
-                    Ht16k33(3, 4),
-                    Ht16k33(3, 0),
+                    Ht16k33(0, 16, 4),
+                    Ht16k33(1, 16, 4),
+                    Ht16k33(2, 16, 4),
+                    Ht16k33(3, 16, 4),
+                    Ht16k33(4, 16, 4),
                 }),
         };
 
@@ -122,7 +87,7 @@ Display::Display(FiveSimdHt16k33Busses & busses):
 
 namespace
 {
-    uint32_t char_to_image(char ch)
+    uint16_t char_to_image(char ch)
     {
         /* -----A-----
          * |\   |   /|
@@ -208,7 +173,7 @@ namespace
         return 0x0000;
     }
 
-    uint32_t dot_to_image(bool dot)
+    uint16_t dot_to_image(bool dot)
     {
         return dot ? 0x0100 : 0x0000;
     }
@@ -236,41 +201,47 @@ void Display::dispatch()
             bool needs_update = false;
             for (auto const & chip : slice.chips)
             {
-                if (_screen_updates_required[chip.line_idx][chip.left_column] ||
-                    _screen_updates_required[chip.line_idx][chip.left_column+1])
+                for (size_t common = 0; common < chip.n_columns; ++common)
                 {
-                    needs_update = true;
-                    break;
+                    if (_screen_updates_required[chip.line_idx][chip.left_column+common])
+                    {
+                        needs_update = true;
+                        goto done_checking_for_updates;
+                    }
                 }
             }
+            done_checking_for_updates:
 
             if (needs_update)
             {
-                std::array<std::array<uint8_t, 5>, 5> commands;
+                size_t constexpr overhead_bytes = 1;
+                size_t constexpr bytes_per_common = 2;
+                size_t constexpr max_commons_per_chip = 8;
+                size_t constexpr max_command_length = overhead_bytes + bytes_per_common * max_commons_per_chip;
+                static_assert(max_command_length == FiveSimdHt16k33Busses::max_cmd_length);
+                std::array<std::array<uint8_t, max_command_length>, 5> commands;
                 for (size_t bus = 0; bus < slice.chips.size(); ++bus)
                 {
-                    char left_char  = _screen_text[slice.chips[bus].line_idx][slice.chips[bus].left_column];
-                    char right_char = _screen_text[slice.chips[bus].line_idx][slice.chips[bus].left_column+1];
-                    char left_dot   = _screen_dots[slice.chips[bus].line_idx][slice.chips[bus].left_column];
-                    char right_dot  = _screen_dots[slice.chips[bus].line_idx][slice.chips[bus].left_column+1];
-
-                    uint32_t left_image = 0;
-                    left_image |= char_to_image(left_char);
-                    left_image |= dot_to_image(left_dot);
-                    uint32_t right_image = 0;
-                    right_image |= char_to_image(right_char);
-                    right_image |= dot_to_image(right_dot);
-
                     commands[bus][0] = 0x00;
-                    commands[bus][1] = (right_image >> 0) & 0xff;
-                    commands[bus][2] = (right_image >> 8) & 0xff;
-                    commands[bus][3] = (left_image  >> 0) & 0xff;
-                    commands[bus][4] = (left_image  >> 8) & 0xff;
+
+                    Ht16k33 const & chip = slice.chips[bus];
+                    for (size_t common = 0; common < chip.n_columns; ++common)
+                    {
+                        char the_char = _screen_text[chip.line_idx][chip.left_column+common];
+                        bool the_dot  = _screen_dots[chip.line_idx][chip.left_column+common];
+
+                        uint16_t image = 0;
+                        image |= char_to_image(the_char);
+                        image |= dot_to_image(the_dot);
+
+                        commands[bus][common*2+1] = (image >> 0) & 0xff;
+                        commands[bus][common*2+2] = (image >> 8) & 0xff;
+                    }
                 }
 
                 if (_busses.begin_write(
                         slice.address,
-                        commands[0].size(),
+                        overhead_bytes + bytes_per_common * slice.chips[0].n_columns,
                         commands[0].data(),
                         commands[1].data(),
                         commands[2].data(),
@@ -281,8 +252,10 @@ void Display::dispatch()
 
                     for (auto const & chip : slice.chips)
                     {
-                        _screen_updates_required[chip.line_idx][chip.left_column] = false;
-                        _screen_updates_required[chip.line_idx][chip.left_column+1] = false;
+                        for (size_t common = 0; common < chip.n_columns; ++common)
+                        {
+                            _screen_updates_required[chip.line_idx][chip.left_column+common] = false;
+                        }
                     }
                 }
                 return;

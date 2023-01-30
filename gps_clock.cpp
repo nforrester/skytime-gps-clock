@@ -243,6 +243,12 @@ int main()
                 printf("Unable to format line 3 of display\n");
             }
 
+            print_result = display.printf(4, "01234567890123456789");
+            if (!print_result)
+            {
+                printf("Unable to format line 4 of display\n");
+            }
+
             display.dump_to_console(true);
             buttons.dump_to_console_if_any_pressed();
         }
