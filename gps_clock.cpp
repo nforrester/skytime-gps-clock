@@ -32,6 +32,7 @@
 #include "Display.h"
 #include "RingBuffer.h"
 #include "GpsUBlox.h"
+#include "Buttons.h"
 
 std::unique_ptr<Pps> pps;
 
@@ -116,6 +117,16 @@ int main()
     else
     {
         printf("Display init FAILED. Error count: %ld.\n", display.error_count());
+    }
+
+    Buttons buttons(five_simd_ht16k33_busses);
+    if (buttons.error_count() == 0)
+    {
+        printf("Buttons init complete.\n");
+    }
+    else
+    {
+        printf("Buttons init FAILED. Error count: %ld.\n", buttons.error_count());
     }
 
     led.on();
@@ -204,17 +215,21 @@ int main()
                 printf("Unable to format line 2 of display\n");
             }
 
-            print_result = display.printf(3, "Errors %6ld %6ld", display.error_count(), gps.tops_of_seconds().error_count());
+            print_result = display.printf(3, "Err %4ld %4ld %4ld", display.error_count(), gps.tops_of_seconds().error_count(), buttons.error_count());
             if (!print_result)
             {
                 printf("Unable to format line 3 of display\n");
             }
 
             display.dump_to_console(true);
+
+            buttons.dump_to_console_if_any_pressed();
+            buttons.begin_poll();
         }
 
         gps.update();
         five_simd_ht16k33_busses.dispatch();
         display.dispatch();
+        buttons.dispatch();
     }
 }

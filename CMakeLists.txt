@@ -19,6 +19,7 @@ add_executable(gps_clock
     packing.cpp
     RingBuffer.cpp
     GpsUBlox.cpp
+    Buttons.cpp
 )
 
 pico_enable_stdio_usb(gps_clock 1)
