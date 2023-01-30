@@ -136,32 +136,53 @@ int main()
 
     printf("Begin main loop.\n");
     uint32_t prev_completed_seconds = 0;
+    uint32_t next_display_update_us = 0;
     while (true)
     {
+        gps.dispatch();
+        five_simd_ht16k33_busses.dispatch();
+        display.dispatch();
+        buttons.dispatch();
+        pps->dispatch_main_thread();
+
         uint32_t completed_seconds = pps->get_completed_seconds();
         if (completed_seconds != prev_completed_seconds)
         {
-            Ymdhms const & utc = gps.tops_of_seconds().next().utc_ymdhms;
-            Ymdhms const & tai = gps.tops_of_seconds().next().tai_ymdhms;
-            Ymdhms const & loc = gps.tops_of_seconds().next().loc_ymdhms;
-            bool const utc_valid = gps.tops_of_seconds().next().utc_ymdhms_valid;
-            bool const tai_valid = gps.tops_of_seconds().next().tai_ymdhms_valid;
-            bool const loc_valid = gps.tops_of_seconds().next().loc_ymdhms_valid;
             prev_completed_seconds = completed_seconds;
+            next_display_update_us = 0;
             gps.pps_pulsed();
+        }
+
+        usec_t display_update_time_us = pps->get_time_us_of(completed_seconds, next_display_update_us);
+        if (display_update_time_us <= time_us_64())
+        {
+            uint8_t tenths = next_display_update_us / 100000;
+            next_display_update_us += 100000;
+            if (next_display_update_us == 1000000)
+            {
+                next_display_update_us += 10000000; // Move the next update far into the future.
+            }
+
+            Ymdhms const & utc = gps.tops_of_seconds().prev().utc_ymdhms;
+            Ymdhms const & tai = gps.tops_of_seconds().prev().tai_ymdhms;
+            Ymdhms const & loc = gps.tops_of_seconds().prev().loc_ymdhms;
+            bool const utc_valid = gps.tops_of_seconds().prev().utc_ymdhms_valid;
+            bool const tai_valid = gps.tops_of_seconds().prev().tai_ymdhms_valid;
+            bool const loc_valid = gps.tops_of_seconds().prev().loc_ymdhms_valid;
 
             bool print_result;
             if (loc_valid)
             {
                 print_result = display.printf(
                     0,
-                    "PST %04d.%02d.%02d %02d.%02d.%02d.0",
+                    "PST %04d.%02d.%02d %02d.%02d.%02d.%d",
                     loc.year,
                     loc.month,
                     loc.day,
                     loc.hour,
                     loc.min,
-                    loc.sec);
+                    loc.sec,
+                    tenths);
             }
             else
             {
@@ -176,13 +197,14 @@ int main()
             {
                 print_result = display.printf(
                     1,
-                    "UTC %04d.%02d.%02d %02d.%02d.%02d.0",
+                    "UTC %04d.%02d.%02d %02d.%02d.%02d.%d",
                     utc.year,
                     utc.month,
                     utc.day,
                     utc.hour,
                     utc.min,
-                    utc.sec);
+                    utc.sec,
+                    tenths);
             }
             else
             {
@@ -197,13 +219,14 @@ int main()
             {
                 print_result = display.printf(
                     2,
-                    "TAI %04d.%02d.%02d %02d.%02d.%02d.0",
+                    "TAI %04d.%02d.%02d %02d.%02d.%02d.%d",
                     tai.year,
                     tai.month,
                     tai.day,
                     tai.hour,
                     tai.min,
-                    tai.sec);
+                    tai.sec,
+                    tenths);
             }
             else
             {
@@ -225,11 +248,5 @@ int main()
             buttons.dump_to_console_if_any_pressed();
             buttons.begin_poll();
         }
-
-        gps.dispatch();
-        five_simd_ht16k33_busses.dispatch();
-        display.dispatch();
-        buttons.dispatch();
-        pps->dispatch_main_thread();
     }
 }
