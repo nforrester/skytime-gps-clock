@@ -1,6 +1,4 @@
 /*
- * Need to make the time update 10 times per second
- *
  * Use this to buffer from PPS line to PPS LED
  * https://www.digikey.com/en/products/detail/diodes-incorporated/74LVC1G17W5-7/3829445
  *
