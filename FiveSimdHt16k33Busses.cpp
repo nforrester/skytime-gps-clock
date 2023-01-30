@@ -279,11 +279,11 @@ void FiveSimdHt16k33Busses::_try_begin_read_part_2()
 
     for (size_t i = 0; i < _bytes_to_read_after_this_operation_is_complete; ++i)
     {
-        _data_buffer0[i+1] = 0;
-        _data_buffer1[i+1] = 0;
-        _data_buffer2[i+1] = 0;
-        _data_buffer3[i+1] = 0;
-        _data_buffer4[i+1] = 0;
+        _data_buffer0[i+1] = 0xff;
+        _data_buffer1[i+1] = 0xff;
+        _data_buffer2[i+1] = 0xff;
+        _data_buffer3[i+1] = 0xff;
+        _data_buffer4[i+1] = 0xff;
         _acks_to_transmit[i+1] = true;
         _acks_expected[i+1] = true;
     }
@@ -324,16 +324,20 @@ bool FiveSimdHt16k33Busses::try_end_read(
         return false;
     }
 
-    for (size_t i = 0; i < _cmd_length; ++i)
+    success = _all_acks_match_expectation && _write_preceeding_read_worked;
+
+    if (success)
     {
-        *(data0+i) = _data_buffer0[i+1];
-        *(data1+i) = _data_buffer1[i+1];
-        *(data2+i) = _data_buffer2[i+1];
-        *(data3+i) = _data_buffer3[i+1];
-        *(data4+i) = _data_buffer4[i+1];
+        for (size_t i = 0; i < _cmd_length; ++i)
+        {
+            if (data0 != nullptr) { *(data0+i) = _data_buffer0[i+1]; }
+            if (data1 != nullptr) { *(data1+i) = _data_buffer1[i+1]; }
+            if (data2 != nullptr) { *(data2+i) = _data_buffer2[i+1]; }
+            if (data3 != nullptr) { *(data3+i) = _data_buffer3[i+1]; }
+            if (data4 != nullptr) { *(data4+i) = _data_buffer4[i+1]; }
+        }
     }
 
-    success = _all_acks_match_expectation && _write_preceeding_read_worked;
     _operation_ended = true;
     return true;
 }
