@@ -8,6 +8,11 @@ Buttons::Buttons(FiveSimdHt16k33Busses & busses):
         byte = 0;
     }
 
+    for (uint8_t & byte : _last_button_data)
+    {
+        byte = 0;
+    }
+
     uint8_t constexpr command = 0xa0;
     if (!_busses.blocking_write(chip_addr, 1, &command, &command, &command, &command, &command))
     {
@@ -23,6 +28,17 @@ void Buttons::begin_poll()
         ++_error_count;
     }
     _poll_requested = true;
+}
+
+bool Buttons::get_button(Button & button)
+{
+    if (_button_events.empty())
+    {
+        return false;
+    }
+    button = _button_events.peek(0);
+    _button_events.pop(1);
+    return true;
 }
 
 void Buttons::dispatch()
@@ -44,6 +60,50 @@ void Buttons::dispatch()
         if (!success)
         {
             ++_error_count;
+        }
+        else
+        {
+            for (size_t i = 0; i < num_button_bytes; ++i)
+            {
+                for (size_t j = 0; j < 8; ++j)
+                {
+                    bool button_old = (_last_button_data[i] >> j) & 1;
+                    bool button_new = (     _button_data[i] >> j) & 1;
+                    if ((!button_old) && button_new)
+                    {
+                        bool space_avail = !_button_events.full();
+                        if (space_avail && i == 1 && j == 4)
+                        {
+                            _button_events.push(Button::Left);
+                        }
+                        else if (space_avail && i == 1 && j == 3)
+                        {
+                            _button_events.push(Button::Down);
+                        }
+                        else if (space_avail && i == 1 && j == 2)
+                        {
+                            _button_events.push(Button::Up);
+                        }
+                        else if (space_avail && i == 3 && j == 4)
+                        {
+                            _button_events.push(Button::Right);
+                        }
+                        else if (space_avail && i == 3 && j == 3)
+                        {
+                            _button_events.push(Button::Plus);
+                        }
+                        else if (space_avail && i == 3 && j == 2)
+                        {
+                            _button_events.push(Button::Minus);
+                        }
+                        else
+                        {
+                            ++_error_count;
+                        }
+                    }
+                }
+                _last_button_data[i] = _button_data[i];
+            }
         }
         _poll_in_progress = false;
     }

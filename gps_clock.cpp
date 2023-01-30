@@ -137,6 +137,7 @@ int main()
     printf("Begin main loop.\n");
     uint32_t prev_completed_seconds = 0;
     uint32_t next_display_update_us = 0;
+    uint32_t next_button_poll_us = 10000;
     while (true)
     {
         gps.dispatch();
@@ -150,6 +151,7 @@ int main()
         {
             prev_completed_seconds = completed_seconds;
             next_display_update_us = 0;
+            next_button_poll_us = 10000;
             gps.pps_pulsed();
         }
 
@@ -244,9 +246,44 @@ int main()
             }
 
             display.dump_to_console(true);
-
             buttons.dump_to_console_if_any_pressed();
+        }
+
+        usec_t button_poll_time_us = pps->get_time_us_of(completed_seconds, next_button_poll_us);
+        if (button_poll_time_us <= time_us_64())
+        {
+            // HT16K33 frame time is 9.504ms. Polling every 20ms guarantees that a full frame will have elapsed in between.
+            next_button_poll_us += 20000;
             buttons.begin_poll();
+        }
+
+        Button button;
+        while (buttons.get_button(button))
+        {
+            if (button == Button::Up)
+            {
+                printf("Up\n");
+            }
+            else if (button == Button::Down)
+            {
+                printf("Down\n");
+            }
+            else if (button == Button::Left)
+            {
+                printf("Left\n");
+            }
+            else if (button == Button::Right)
+            {
+                printf("Right\n");
+            }
+            else if (button == Button::Plus)
+            {
+                printf("Plus\n");
+            }
+            else if (button == Button::Minus)
+            {
+                printf("Minus\n");
+            }
         }
     }
 }
