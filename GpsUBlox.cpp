@@ -338,7 +338,7 @@ bool GpsUBlox::_read_ubx(uint8_t * msg_class,
     return false;
 }
 
-void GpsUBlox::update()
+void GpsUBlox::dispatch()
 {
     uint8_t rx_msg_class;
     uint8_t rx_msg_id;

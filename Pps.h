@@ -9,7 +9,7 @@ class Pps
 {
 public:
     Pps(PIO pio, uint const pin);
-    void update();
+    void dispatch();
     void get_status(uint32_t * completed_seconds, uint32_t * bicycles_in_last_second);
 
 private:

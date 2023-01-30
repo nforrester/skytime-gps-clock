@@ -40,7 +40,7 @@ void core1_main()
 {
     while (true)
     {
-        pps->update();
+        pps->dispatch();
     }
 }
 
@@ -227,7 +227,7 @@ int main()
             buttons.begin_poll();
         }
 
-        gps.update();
+        gps.dispatch();
         five_simd_ht16k33_busses.dispatch();
         display.dispatch();
         buttons.dispatch();

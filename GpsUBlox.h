@@ -15,7 +15,7 @@ public:
         return _initialized_successfully;
     }
 
-    void update();
+    void dispatch();
 
     void pps_pulsed()
     {

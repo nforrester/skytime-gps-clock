@@ -9,7 +9,7 @@ Pps::Pps(PIO pio, uint const pin): _pio(pio)
     pps_program_init(_pio, _sm, offset, pin);
 }
 
-void Pps::update()
+void Pps::dispatch()
 {
     if (pps_program_second_completed(_pio, _sm))
     {
