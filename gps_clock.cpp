@@ -31,6 +31,7 @@
 #include "RingBuffer.h"
 #include "GpsUBlox.h"
 #include "Buttons.h"
+#include "Artist.h"
 
 std::unique_ptr<Pps> pps;
 
@@ -127,6 +128,9 @@ int main()
         printf("Buttons init FAILED. Error count: %ld.\n", buttons.error_count());
     }
 
+    Artist artist(display, buttons, gps);
+    printf("Artist init complete.\n");
+
     led.on();
 
     printf("Launching PPS monitoring thread.\n");
@@ -163,91 +167,7 @@ int main()
                 next_display_update_us += 10000000; // Move the next update far into the future.
             }
 
-            Ymdhms const & utc = gps.tops_of_seconds().prev().utc_ymdhms;
-            Ymdhms const & tai = gps.tops_of_seconds().prev().tai_ymdhms;
-            Ymdhms const & loc = gps.tops_of_seconds().prev().loc_ymdhms;
-            bool const utc_valid = gps.tops_of_seconds().prev().utc_ymdhms_valid;
-            bool const tai_valid = gps.tops_of_seconds().prev().tai_ymdhms_valid;
-            bool const loc_valid = gps.tops_of_seconds().prev().loc_ymdhms_valid;
-
-            bool print_result;
-            if (loc_valid)
-            {
-                print_result = display.printf(
-                    0,
-                    "PST %04d.%02d.%02d %02d.%02d.%02d.%d",
-                    loc.year,
-                    loc.month,
-                    loc.day,
-                    loc.hour,
-                    loc.min,
-                    loc.sec,
-                    tenths);
-            }
-            else
-            {
-                print_result = display.printf(0, "PST Initializing...");
-            }
-            if (!print_result)
-            {
-                printf("Unable to format line 0 of display\n");
-            }
-
-            if (utc_valid)
-            {
-                print_result = display.printf(
-                    1,
-                    "UTC %04d.%02d.%02d %02d.%02d.%02d.%d",
-                    utc.year,
-                    utc.month,
-                    utc.day,
-                    utc.hour,
-                    utc.min,
-                    utc.sec,
-                    tenths);
-            }
-            else
-            {
-                print_result = display.printf(1, "UTC Initializing...");
-            }
-            if (!print_result)
-            {
-                printf("Unable to format line 1 of display\n");
-            }
-
-            if (tai_valid)
-            {
-                print_result = display.printf(
-                    2,
-                    "TAI %04d.%02d.%02d %02d.%02d.%02d.%d",
-                    tai.year,
-                    tai.month,
-                    tai.day,
-                    tai.hour,
-                    tai.min,
-                    tai.sec,
-                    tenths);
-            }
-            else
-            {
-                print_result = display.printf(2, "TAI Initializing...");
-            }
-            if (!print_result)
-            {
-                printf("Unable to format line 2 of display\n");
-            }
-
-            print_result = display.printf(3, "Err %4ld %4ld %4ld", display.error_count(), gps.tops_of_seconds().error_count(), buttons.error_count());
-            if (!print_result)
-            {
-                printf("Unable to format line 3 of display\n");
-            }
-
-            print_result = display.printf(4, "01234567890123456789");
-            if (!print_result)
-            {
-                printf("Unable to format line 4 of display\n");
-            }
+            artist.top_of_tenth_of_second(tenths);
 
             display.dump_to_console(true);
             buttons.dump_to_console_if_any_pressed();
