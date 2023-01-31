@@ -145,30 +145,107 @@ namespace
             /* z */ a|e|j|n,
         };
 
-        uint32_t constexpr digits[10] = {
-            /* 0 */ a|b|e|f|i|j|m|n,
-            /* 1 */ f|m,
-            /* 2 */ a|f|g|h|i|n,
-            /* 3 */ a|f|h|m|n,
-            /* 4 */ b|f|g|h|m,
-            /* 5 */ a|b|g|h|m|n,
-            /* 6 */ b|g|h|i|m|n,
-            /* 7 */ a|e|j,
-            /* 8 */ a|b|f|g|h|i|m|n,
-            /* 9 */ a|b|f|g|h|m,
+        uint32_t constexpr table[95] = {
+            0,               // space
+            0, // !
+            0, // "
+            0, // #
+            a|c|h|m|n|d|k,   // $
+            0, // %
+            0, // &
+            e,               // '
+            0, // (
+            0, // )
+            d|e|h|l|k|j|g|c, // *
+            d|k|g|h,         // +
+            0, // ,
+            g|h,             // -
+            0, // .
+            j|e,             // /
+            a|b|e|f|i|j|m|n, // 0
+            f|m,             // 1
+            a|f|g|h|i|n,     // 2
+            a|f|h|m|n,       // 3
+            b|f|g|h|m,       // 4
+            a|b|g|h|m|n,     // 5
+            b|g|h|i|m|n,     // 6
+            a|e|j,           // 7
+            a|b|f|g|h|i|m|n, // 8
+            a|b|f|g|h|m,     // 9
+            0, // :
+            0, // ;
+            e|l,             // <
+            g|h|n,           // =
+            c|j,             // >
+            0, // ?
+            0, // @
+            letters[0],      // A
+            letters[1],      // B
+            letters[2],      // C
+            letters[3],      // D
+            letters[4],      // E
+            letters[5],      // F
+            letters[6],      // G
+            letters[7],      // H
+            letters[8],      // I
+            letters[9],      // J
+            letters[10],     // K
+            letters[11],     // L
+            letters[12],     // M
+            letters[13],     // N
+            letters[14],     // O
+            letters[15],     // P
+            letters[16],     // Q
+            letters[17],     // R
+            letters[18],     // S
+            letters[19],     // T
+            letters[20],     // U
+            letters[21],     // V
+            letters[22],     // W
+            letters[23],     // X
+            letters[24],     // Y
+            letters[25],     // Z
+            0, // [
+            c|l,             // backslash
+            0, // ]
+            e|f,             // ^
+            n,               // _
+            c,               // `
+            letters[0],      // a
+            letters[1],      // b
+            letters[2],      // c
+            letters[3],      // d
+            letters[4],      // e
+            letters[5],      // f
+            letters[6],      // g
+            letters[7],      // h
+            letters[8],      // i
+            letters[9],      // j
+            letters[10],     // k
+            letters[11],     // l
+            letters[12],     // m
+            letters[13],     // n
+            letters[14],     // o
+            letters[15],     // p
+            letters[16],     // q
+            letters[17],     // r
+            letters[18],     // s
+            letters[19],     // t
+            letters[20],     // u
+            letters[21],     // v
+            letters[22],     // w
+            letters[23],     // x
+            letters[24],     // y
+            letters[25],     // z
+            0, // {
+            d|k,             // |
+            0, // }
+            0, // ~
         };
 
-        if ('a' <= ch && ch <= 'z')
+        if (' ' <= ch && ch <= '~')
         {
-            return letters[ch - 'a'];
-        }
-        if ('A' <= ch && ch <= 'Z')
-        {
-            return letters[ch - 'A'];
-        }
-        if ('0' <= ch && ch <= '9')
-        {
-            return digits[ch - '0'];
+            return table[ch - ' '];
         }
         return 0x0000;
     }

@@ -52,3 +52,13 @@ void Artist::_print_time(size_t line, TimeRepresentation const & time_rep, uint8
         printf("Unable to format line %u of display\n", line);
     }
 }
+
+void Artist::_font_debug(size_t line)
+{
+    uint32_t constexpr cycles_per = 5;
+    if (++_font_debug_count % cycles_per == 0)
+    {
+        char ch = ((_font_debug_count/cycles_per) % ('~' - ' ' + 1)) + ' ';
+        _disp.printf(line, "                   %c", ch);
+    }
+}
