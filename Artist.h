@@ -1,5 +1,6 @@
 #pragma once
 
+#include "time.h"
 #include "Display.h"
 #include "Buttons.h"
 #include "GpsUBlox.h"
@@ -17,4 +18,6 @@ private:
     Display & _disp;
     Buttons & _buttons;
     GpsUBlox & _gps;
+
+    void _print_time(size_t line, TimeRepresentation const & time_rep, uint8_t tenths);
 };

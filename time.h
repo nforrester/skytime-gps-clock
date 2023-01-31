@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 #include "util.h"
 
@@ -84,12 +85,6 @@ public:
     Ymdhms tai_ymdhms;
     bool tai_ymdhms_valid = false;
 
-    Ymdhms loc_ymdhms;
-    bool loc_ymdhms_valid = false;
-    static uint32_t constexpr pdt_minus_utc_seconds = -7 * secs_per_hour;
-    static uint32_t constexpr pst_minus_utc_seconds = -8 * secs_per_hour;
-    static uint32_t constexpr loc_minus_utc_seconds = pst_minus_utc_seconds;
-
     int8_t gps_minus_utc;
     bool gps_minus_utc_valid = false;
 
@@ -108,7 +103,6 @@ public:
 
 private:
     void _try_set_tai_ymdhms();
-    void _try_set_loc_ymdhms();
 };
 
 class TopsOfSeconds
@@ -146,4 +140,57 @@ private:
     static ssize_t constexpr buffer_size = 2;
     TopOfSecond _tops[buffer_size];
     ssize_t _next = 0;
+};
+
+class TimeRepresentation
+{
+public:
+    TimeRepresentation(std::string const & abbrev): _abbrev(abbrev) {}
+    //virtual ~TimeRepresentation() {}
+
+    std::string const & abbrev() const { return _abbrev; }
+
+    virtual bool make_ymdhms(TopOfSecond const & top_of_second, Ymdhms & ymdhms) const = 0;
+
+private:
+    std::string _abbrev;
+};
+
+class TimeRepTai: public TimeRepresentation
+{
+public:
+    TimeRepTai(): TimeRepresentation("TAI") {}
+
+    bool make_ymdhms(TopOfSecond const & top_of_second, Ymdhms & ymdhms) const override
+    {
+        if (!top_of_second.tai_ymdhms_valid)
+        {
+            return false;
+        }
+        ymdhms = top_of_second.tai_ymdhms;
+        return true;
+    }
+};
+
+class TimeZone: public TimeRepresentation
+{
+public:
+    TimeZone(std::string const & abbrev, int32_t utc_offset_seconds):
+        TimeRepresentation(abbrev),
+        _utc_offset_seconds(utc_offset_seconds)
+    {}
+
+    bool make_ymdhms(TopOfSecond const & top_of_second, Ymdhms & ymdhms) const override
+    {
+        if (!top_of_second.utc_ymdhms_valid)
+        {
+            return false;
+        }
+        ymdhms = top_of_second.utc_ymdhms;
+        ymdhms.add_seconds(_utc_offset_seconds);
+        return true;
+    }
+
+private:
+    int32_t _utc_offset_seconds;
 };
