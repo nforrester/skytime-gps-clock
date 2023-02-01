@@ -170,7 +170,6 @@ int main()
             artist.top_of_tenth_of_second(tenths);
 
             display.dump_to_console(true);
-            buttons.dump_to_console_if_any_pressed();
         }
 
         usec_t button_poll_time_us = pps->get_time_us_of(completed_seconds, next_button_poll_us);
@@ -184,30 +183,7 @@ int main()
         Button button;
         while (buttons.get_button(button))
         {
-            if (button == Button::Up)
-            {
-                printf("Up\n");
-            }
-            else if (button == Button::Down)
-            {
-                printf("Down\n");
-            }
-            else if (button == Button::Left)
-            {
-                printf("Left\n");
-            }
-            else if (button == Button::Right)
-            {
-                printf("Right\n");
-            }
-            else if (button == Button::Plus)
-            {
-                printf("Plus\n");
-            }
-            else if (button == Button::Minus)
-            {
-                printf("Minus\n");
-            }
+            artist.button_pressed(button);
         }
     }
 }
