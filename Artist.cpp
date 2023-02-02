@@ -27,6 +27,7 @@ Artist::Artist(Display & display,
     }
 
     auto contents = make_unique<Menu>("Contents");
+    array<size_t, Display::num_lines> defaults = {0, 2, 6, 4, 5};
     for (size_t line = 0; line < Display::num_lines; ++line)
     {
         auto radiobutton = make_unique<Radiobutton<LinePrinter>>("Line " + to_string(line + 1));
@@ -34,6 +35,7 @@ Artist::Artist(Display & display,
         {
             radiobutton->add_item(get<string>(x), get<shared_ptr<LinePrinter>>(x));
         }
+        radiobutton->set_selection(defaults[line]);
         Radiobutton<LinePrinter> & rb_ref = *radiobutton;
         _main_display_contents[line] = [&rb_ref]()->LinePrinter&{ return rb_ref.get(); };
         contents->add_item(move(radiobutton));

@@ -24,6 +24,7 @@ public:
     virtual std::string const & item_name(size_t index) const = 0;
     size_t selected() const { return _selected; }
     virtual size_t num_items() const = 0;
+    void set_selection(size_t selection) { _selected = selection; }
 protected:
     virtual Menuverable * _get_submenu(size_t /* index */) { return nullptr; };
 private:
