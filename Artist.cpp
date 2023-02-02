@@ -9,8 +9,38 @@ Artist::Artist(Display & display,
 {
     using namespace std;
 
+    vector<tuple<string, shared_ptr<TimeRepresentation>>> time_reps;
+    time_reps.push_back(make_tuple("Pacific Standard Time",      make_shared<TimeZone>("PST", -8 * secs_per_hour)));
+    time_reps.push_back(make_tuple("Pacific Daylight Time",      make_shared<TimeZone>("PDT", -7 * secs_per_hour)));
+    time_reps.push_back(make_tuple("Central Standard Time",      make_shared<TimeZone>("CST", -6 * secs_per_hour)));
+    time_reps.push_back(make_tuple("Central Daylight Time",      make_shared<TimeZone>("CDT", -5 * secs_per_hour)));
+    time_reps.push_back(make_tuple("Coordinated Universal Time", make_shared<TimeZone>("UTC", 0)));
+    time_reps.push_back(make_tuple("International Atomic Time",  make_shared<TimeRepTai>()));
+    time_reps.push_back(make_tuple("Taiwan Time",                make_shared<TimeZone>("TWT",  8 * secs_per_hour)));
+
+    vector<tuple<string, shared_ptr<LinePrinter>>> line_options;
+    for (auto & x : time_reps)
+    {
+        line_options.push_back(make_tuple(
+            get<string>(x),
+            make_shared<TimePrinter>(display, gps, get<shared_ptr<TimeRepresentation>>(x))));
+    }
+
+    auto contents = make_unique<Menu>("Contents");
+    for (size_t line = 0; line < Display::num_lines; ++line)
+    {
+        auto radiobutton = make_unique<Radiobutton<LinePrinter>>("Line " + to_string(line + 1));
+        for (auto & x : line_options)
+        {
+            radiobutton->add_item(get<string>(x), get<shared_ptr<LinePrinter>>(x));
+        }
+        Radiobutton<LinePrinter> & rb_ref = *radiobutton;
+        _main_display_contents[line] = [&rb_ref]()->LinePrinter&{ return rb_ref.get(); };
+        contents->add_item(move(radiobutton));
+    }
+
     auto digital_display = make_unique<Menu>("Digital Display");
-    digital_display->add_item(make_unique<Menu>("Contents"));
+    digital_display->add_item(move(contents));
     digital_display->add_item(make_unique<Menu>("Brightness"));
 
     auto menu = make_unique<Menu>("Menu");
@@ -33,30 +63,23 @@ void Artist::top_of_tenth_of_second(uint8_t tenths)
 
 void Artist::_show_main_display(uint8_t tenths)
 {
-    //_print_time(0, TimeZone("PDT", -7 * secs_per_hour));
-    _print_time(0, TimeZone("PST", -8 * secs_per_hour), tenths);
-    _print_time(1, TimeZone("TWT", 8 * secs_per_hour), tenths);
-    _print_time(2, TimeZone("UTC", 0), tenths);
-    _print_time(3, TimeRepTai(), tenths);
-
-    bool print_result = _disp.printf(4, "Err %3ld %3ld %3ld %3ld", _disp.error_count(), _gps.tops_of_seconds().error_count(), _buttons.error_count(), _error_count);
-    if (!print_result)
+    for (size_t line = 0; line < _main_display_contents.size(); ++line)
     {
-        printf("Unable to format line 4 of display\n");
+        _main_display_contents[line]().print(line, tenths);
     }
 }
 
-void Artist::_print_time(size_t line, TimeRepresentation const & time_rep, uint8_t tenths)
+void TimePrinter::print(size_t line, uint8_t tenths)
 {
     Ymdhms ymdhms;
 
     bool print_result;
-    if (time_rep.make_ymdhms(_gps.tops_of_seconds().prev(), ymdhms))
+    if (_time_rep->make_ymdhms(_gps.tops_of_seconds().prev(), ymdhms))
     {
         print_result = _disp.printf(
             line,
             "%-4s%04d.%02d.%02d %02d.%02d.%02d.%d",
-            time_rep.abbrev().c_str(),
+            _time_rep->abbrev().c_str(),
             ymdhms.year,
             ymdhms.month,
             ymdhms.day,
@@ -67,7 +90,7 @@ void Artist::_print_time(size_t line, TimeRepresentation const & time_rep, uint8
     }
     else
     {
-        print_result = _disp.printf(line, "%s Initializing...", time_rep.abbrev().c_str());
+        print_result = _disp.printf(line, "%s Initializing...", _time_rep->abbrev().c_str());
     }
     if (!print_result)
     {
@@ -169,25 +192,25 @@ void Artist::_show_menu()
     ssize_t selected = menu->selected();
     ssize_t num_items = menu->num_items();
     ssize_t first_item_to_show;
-    static_assert(Display::num_lines == 5);
+    ssize_t constexpr scrollable_height = Display::num_lines - 1;
     if (selected == 0)
     {
         first_item_to_show = 0;
     }
     else if (selected == num_items - 1)
     {
-        first_item_to_show = std::max(0, num_items - 4);
+        first_item_to_show = std::max(0, num_items - scrollable_height);
     }
     else if (selected == num_items - 2)
     {
-        first_item_to_show = std::max(0, num_items - 4);
+        first_item_to_show = std::max(0, num_items - scrollable_height);
     }
     else
     {
         first_item_to_show = selected - 1;
     }
 
-    for (ssize_t item = first_item_to_show; item < first_item_to_show + 4; ++item)
+    for (ssize_t item = first_item_to_show; item < first_item_to_show + scrollable_height; ++item)
     {
         if (item >= static_cast<ssize_t>(menu->num_items()))
         {

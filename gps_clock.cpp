@@ -170,6 +170,11 @@ int main()
             artist.top_of_tenth_of_second(tenths);
 
             display.dump_to_console(true);
+            printf("Error counts: %ld %ld %ld %ld\n",
+                   display.error_count(),
+                   gps.tops_of_seconds().error_count(),
+                   buttons.error_count(),
+                   artist.error_count());
         }
 
         usec_t button_poll_time_us = pps->get_time_us_of(completed_seconds, next_button_poll_us);
