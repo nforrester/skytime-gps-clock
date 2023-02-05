@@ -26,7 +26,24 @@ GpsUBlox::GpsUBlox(uart_inst_t * const uart_id, uint const tx_pin, uint const rx
         return;
     }
 
-    if (!_send_ubx_cfg_tp5(0, 0, 0, 1, 1, 100000, 100000, 0, true, true, false, true, true, true, true, 1, true))
+    if (!_send_ubx_cfg_tp5(
+            0,      // tpIdx
+            0,      // antCableDelay
+            0,      // rfGroupDelay
+            1,      // freqPeriod
+            1,      // freqPeriodLock
+            100000, // pulseLenRatio
+            100000, // pulseLenRatioLock
+            0,      // userConfigDelay
+            true,   // active
+            true,   // lockGnssFreq
+            false,  // lockedOtherSet
+            true,   // isFreq
+            true,   // isLength
+            true,   // alignToTow
+            true,   // polarity
+            1,      // gridUtcGnss
+            true))  // syncMode
     {
         return;
     }
