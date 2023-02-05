@@ -52,11 +52,17 @@ void Pps::dispatch_main_thread()
         {
             // PPS discontinuity
             _bicycles_per_gps_second_average.reset(bicycles_per_chip_second);
+            _lock_persistence = 0;
         }
         else
         {
             // PPS ok, error is due to clock drift in microcontroller.
             _bicycles_per_gps_second_average.add_point(bicycles_in_last_second);
+
+            if (_lock_persistence < _lock_persistence_expected)
+            {
+                ++_lock_persistence;
+            }
         }
         _prev_completed_seconds = completed_seconds;
     }

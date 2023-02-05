@@ -10,19 +10,27 @@ class GpsUBlox
 public:
     GpsUBlox(uart_inst_t * const uart_id, uint const tx_pin, uint const rx_pin);
 
-    bool initialized_successfully() const
+    inline bool initialized_successfully() const
     {
         return _initialized_successfully;
     }
 
     void dispatch();
 
-    void pps_pulsed()
+    inline void pps_pulsed()
     {
         _tops_of_seconds.top_of_second_has_passed();
     }
 
-    TopsOfSeconds const & tops_of_seconds() const { return _tops_of_seconds; }
+    inline void pps_lock_state(bool locked) {
+        _pps_locked = locked;
+        if (!locked)
+        {
+            _tops_of_seconds.invalidate();
+        }
+    }
+
+    inline TopsOfSeconds const & tops_of_seconds() const { return _tops_of_seconds; }
 
 private:
     TopsOfSeconds _tops_of_seconds;
@@ -32,6 +40,8 @@ private:
     bool _initialized_successfully = false;
 
     uart_inst_t * const _uart_id;
+
+    bool _pps_locked = false;
 
     class Checksum
     {

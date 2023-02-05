@@ -30,14 +30,14 @@ GpsUBlox::GpsUBlox(uart_inst_t * const uart_id, uint const tx_pin, uint const rx
             0,      // tpIdx
             0,      // antCableDelay
             0,      // rfGroupDelay
-            1,      // freqPeriod
+            10,     // freqPeriod
             1,      // freqPeriodLock
-            100000, // pulseLenRatio
-            100000, // pulseLenRatioLock
+            50000,  // pulseLenRatio
+            500000, // pulseLenRatioLock
             0,      // userConfigDelay
             true,   // active
             true,   // lockGnssFreq
-            false,  // lockedOtherSet
+            true,   // lockedOtherSet
             true,   // isFreq
             true,   // isLength
             true,   // alignToTow
@@ -474,7 +474,7 @@ void GpsUBlox::dispatch()
 
                 //printf("UBX-NAV-PVT     %lu    %02d-%02d-%02d %02d:%02d:%02d.%03ld %03ld %03ld +/- %5ld ns    (%s)      %ld.%07ld, %ld.%07ld - %d sats\n", iTOW, year, month, day, hour, min, sec, nano/1000000, nano/1000%1000, nano%1000, tAcc, time_ok ? " valid " : "INVALID", lat/10000000, labs(lat)%10000000, lon/10000000, labs(lon)%10000000, numSV);
 
-                if (time_ok)
+                if (time_ok && _pps_locked)
                 {
                     _tops_of_seconds.prev().set_utc_ymdhms(year, month, day, hour, min, sec);
                     _tops_of_seconds.next().set_from_prev_second(_tops_of_seconds.prev());
@@ -530,15 +530,18 @@ void GpsUBlox::dispatch()
 
                 //printf("UBX-NAV-TIMELS,%lu,%d,%d,%ld,%d,%d\n", iTOW, currLs, lsChange, timeToLsEvent, validCurrLs, validTimeToLsEvent);
 
-                if (validCurrLs)
+                if (_pps_locked)
                 {
-                    _tops_of_seconds.prev().set_gps_minus_utc(currLs);
+                    if (validCurrLs)
+                    {
+                        _tops_of_seconds.prev().set_gps_minus_utc(currLs);
+                    }
+                    if (validTimeToLsEvent)
+                    {
+                        _tops_of_seconds.prev().set_next_leap_second(timeToLsEvent, lsChange);
+                    }
+                    _tops_of_seconds.next().set_from_prev_second(_tops_of_seconds.prev());
                 }
-                if (validTimeToLsEvent)
-                {
-                    _tops_of_seconds.prev().set_next_leap_second(timeToLsEvent, lsChange);
-                }
-                _tops_of_seconds.next().set_from_prev_second(_tops_of_seconds.prev());
             }
         }
     }

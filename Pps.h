@@ -21,6 +21,8 @@ public:
     uint32_t get_completed_seconds() const;
     usec_t get_time_us_of(uint32_t completed_seconds, uint32_t additional_microseconds) const;
 
+    bool locked() const { return _lock_persistence == _lock_persistence_expected; }
+
 private:
     // Constants
     static constexpr uint32_t bicycles_per_chip_second = 125000000/2;
@@ -41,5 +43,8 @@ private:
     uint32_t _prev_completed_seconds = 0;
     usec_t _prev_top_of_second_time_us = 0;
     MovingAverage<uint64_t, 60> _bicycles_per_gps_second_average;
+
+    uint8_t static constexpr _lock_persistence_expected = 3;
+    uint8_t _lock_persistence = 0;
 };
 

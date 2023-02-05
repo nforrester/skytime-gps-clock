@@ -154,6 +154,7 @@ int main()
             prev_completed_seconds = completed_seconds;
             next_display_update_us = 0;
             next_button_poll_us = 10000;
+            gps.pps_lock_state(pps->locked());
             gps.pps_pulsed();
         }
 

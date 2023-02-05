@@ -110,6 +110,11 @@ class TopsOfSeconds
 public:
     TopsOfSeconds()
     {
+        invalidate();
+    }
+
+    void invalidate()
+    {
         for (ssize_t i = 0; i < buffer_size; ++i)
         {
             _tops[i].invalidate();
