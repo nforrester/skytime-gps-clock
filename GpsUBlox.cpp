@@ -30,7 +30,7 @@ GpsUBlox::GpsUBlox(uart_inst_t * const uart_id, uint const tx_pin, uint const rx
             0,      // tpIdx
             0,      // antCableDelay
             0,      // rfGroupDelay
-            10,     // freqPeriod
+            1,      // freqPeriod
             1,      // freqPeriodLock
             50000,  // pulseLenRatio
             100000, // pulseLenRatioLock

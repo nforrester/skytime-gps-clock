@@ -15,6 +15,9 @@ count_while_high:
 check_for_low:
     jmp pin count_while_high
 
+    mov isr, x        // Move the counted-down X to the ISR...
+    push noblock      // and then back to the host so that it can know how long we took.
+
 count_while_low:
 .wrap_target
     jmp x-- check_for_high
@@ -30,15 +33,19 @@ check_for_high:
 #include <limits>
 
 // Do your subtraction from this, but...
-static inline constexpr uint32_t pps_program_initial_count_effective()
+static inline constexpr uint32_t pps_program_initial_count_effective_for_second()
 {
     return std::numeric_limits<uint32_t>::max();
+}
+static inline constexpr uint32_t pps_program_initial_count_effective_for_pulse()
+{
+    return pps_program_initial_count_effective_for_second() - 2;
 }
 
 // Actually initialize the counter with this, because of two extra bicycles between seconds.
 static inline constexpr uint32_t pps_program_initial_count_actual()
 {
-    return pps_program_initial_count_effective() - 2;
+    return pps_program_initial_count_effective_for_second() - 3;
 }
 
 static inline void pps_program_init(PIO pio, uint sm, uint offset, uint pps_pin)
@@ -67,16 +74,26 @@ static inline void pps_program_init(PIO pio, uint sm, uint offset, uint pps_pin)
     pio_sm_get_blocking(pio, sm);
 }
 
+// Must alternate between checking for and fetching the pulse length...
+static inline bool pps_program_pulse_completed(PIO pio, uint sm)
+{
+    return !pio_sm_is_rx_fifo_empty(pio, sm);
+}
+static inline uint32_t pps_program_get_bicycles_in_last_complete_pulse(PIO pio, uint sm)
+{
+    return pps_program_initial_count_effective_for_pulse() - pio_sm_get(pio, sm);
+}
+
+// ...and checking for and fetching the second length.
 static inline bool pps_program_second_completed(PIO pio, uint sm)
 {
     return !pio_sm_is_rx_fifo_empty(pio, sm);
 }
-
 static inline uint32_t pps_program_get_bicycles_in_last_complete_second(PIO pio, uint sm)
 {
     // Recharge the counter
     pio_sm_put(pio, sm, pps_program_initial_count_actual());
 
-    return pps_program_initial_count_effective() - pio_sm_get(pio, sm);
+    return pps_program_initial_count_effective_for_second() - pio_sm_get(pio, sm);
 }
 %}
