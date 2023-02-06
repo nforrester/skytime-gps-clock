@@ -90,7 +90,7 @@ uint32_t Wwvb::top_of_second(Ymdhms const & utc)
 
     // We have no way to get DUT1
 
-    uint16_t year = utc.year;
+    uint16_t year = utc.year % 100;
     time_code |= convert_whole_portion_to_bit(year, 80, 45);
     time_code |= convert_whole_portion_to_bit(year, 40, 46);
     time_code |= convert_whole_portion_to_bit(year, 20, 47);
