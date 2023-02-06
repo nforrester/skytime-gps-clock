@@ -539,6 +539,426 @@ bool tos_test()
 
     test_assert_unsigned_eq(tos.error_count(), (uint32_t)2);
 
+    // Test the 2015 leap second.
+    tos.prev().set_utc_ymdhms(2015, 6, 30, 23, 59, 0);
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)3); // One error from the skip in UTC
+    tos.next().set_from_prev_second(tos.prev());
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)3);
+
+    tos.prev().set_gps_minus_utc(16);
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)4); // One error from the skip in TAI
+    tos.prev().set_next_leap_second(60, 1);
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)4);
+    tos.next().set_from_prev_second(tos.prev());
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)4);
+
+    test_assert(tos.prev().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.month, 6);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.day, 30);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.hour, 23);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.min, 59);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.sec, 0);
+
+    test_assert(tos.prev().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.month, 6);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.day, 30);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.hour, 23);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.min, 59);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.sec, 35);
+
+    test_assert(tos.prev().next_leap_second_time_until == 60);
+    test_assert(tos.prev().next_leap_second_direction == 1);
+    test_assert(tos.prev().next_leap_second_valid);
+
+    test_assert(tos.next().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.next().utc_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.next().utc_ymdhms.month, 6);
+    test_assert_signed_eq(tos.next().utc_ymdhms.day, 30);
+    test_assert_signed_eq(tos.next().utc_ymdhms.hour, 23);
+    test_assert_signed_eq(tos.next().utc_ymdhms.min, 59);
+    test_assert_signed_eq(tos.next().utc_ymdhms.sec, 1);
+
+    test_assert(tos.next().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.next().tai_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.next().tai_ymdhms.month, 6);
+    test_assert_signed_eq(tos.next().tai_ymdhms.day, 30);
+    test_assert_signed_eq(tos.next().tai_ymdhms.hour, 23);
+    test_assert_signed_eq(tos.next().tai_ymdhms.min, 59);
+    test_assert_signed_eq(tos.next().tai_ymdhms.sec, 36);
+
+    test_assert(tos.next().next_leap_second_time_until == 59);
+    test_assert(tos.next().next_leap_second_direction == 1);
+    test_assert(tos.next().next_leap_second_valid);
+
+    for (int i = 0; i < 58; ++i)
+    {
+        tos.top_of_second_has_passed();
+    }
+
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)4);
+
+    test_assert(tos.prev().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.month, 6);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.day, 30);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.hour, 23);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.min, 59);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.sec, 58);
+
+    test_assert(tos.prev().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.month, 7);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.day, 1);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.hour, 0);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.min, 0);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.sec, 33);
+
+    test_assert(tos.prev().next_leap_second_time_until == 2);
+    test_assert(tos.prev().next_leap_second_direction == 1);
+    test_assert(tos.prev().next_leap_second_valid);
+
+    test_assert(tos.next().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.next().utc_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.next().utc_ymdhms.month, 6);
+    test_assert_signed_eq(tos.next().utc_ymdhms.day, 30);
+    test_assert_signed_eq(tos.next().utc_ymdhms.hour, 23);
+    test_assert_signed_eq(tos.next().utc_ymdhms.min, 59);
+    test_assert_signed_eq(tos.next().utc_ymdhms.sec, 59);
+
+    test_assert(tos.next().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.next().tai_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.next().tai_ymdhms.month, 7);
+    test_assert_signed_eq(tos.next().tai_ymdhms.day, 1);
+    test_assert_signed_eq(tos.next().tai_ymdhms.hour, 0);
+    test_assert_signed_eq(tos.next().tai_ymdhms.min, 0);
+    test_assert_signed_eq(tos.next().tai_ymdhms.sec, 34);
+
+    test_assert(tos.next().next_leap_second_time_until == 1);
+    test_assert(tos.next().next_leap_second_direction == 1);
+    test_assert(tos.next().next_leap_second_valid);
+
+    tos.top_of_second_has_passed();
+
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)4);
+
+    test_assert(tos.prev().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.month, 6);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.day, 30);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.hour, 23);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.min, 59);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.sec, 59);
+
+    test_assert(tos.prev().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.month, 7);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.day, 1);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.hour, 0);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.min, 0);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.sec, 34);
+
+    test_assert(tos.prev().next_leap_second_time_until == 1);
+    test_assert(tos.prev().next_leap_second_direction == 1);
+    test_assert(tos.prev().next_leap_second_valid);
+
+    test_assert(tos.next().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.next().utc_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.next().utc_ymdhms.month, 6);
+    test_assert_signed_eq(tos.next().utc_ymdhms.day, 30);
+    test_assert_signed_eq(tos.next().utc_ymdhms.hour, 23);
+    test_assert_signed_eq(tos.next().utc_ymdhms.min, 59);
+    test_assert_signed_eq(tos.next().utc_ymdhms.sec, 60);
+
+    test_assert(tos.next().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.next().tai_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.next().tai_ymdhms.month, 7);
+    test_assert_signed_eq(tos.next().tai_ymdhms.day, 1);
+    test_assert_signed_eq(tos.next().tai_ymdhms.hour, 0);
+    test_assert_signed_eq(tos.next().tai_ymdhms.min, 0);
+    test_assert_signed_eq(tos.next().tai_ymdhms.sec, 35);
+
+    test_assert(tos.next().next_leap_second_time_until == 0);
+    test_assert(tos.next().next_leap_second_direction == 1);
+    test_assert(tos.next().next_leap_second_valid);
+
+    tos.top_of_second_has_passed();
+
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)4);
+
+    test_assert(tos.prev().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.month, 6);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.day, 30);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.hour, 23);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.min, 59);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.sec, 60);
+
+    test_assert(tos.prev().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.month, 7);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.day, 1);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.hour, 0);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.min, 0);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.sec, 35);
+
+    test_assert(tos.prev().next_leap_second_time_until == 0);
+    test_assert(tos.prev().next_leap_second_direction == 1);
+    test_assert(tos.prev().next_leap_second_valid);
+
+    test_assert(tos.next().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.next().utc_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.next().utc_ymdhms.month, 7);
+    test_assert_signed_eq(tos.next().utc_ymdhms.day, 1);
+    test_assert_signed_eq(tos.next().utc_ymdhms.hour, 0);
+    test_assert_signed_eq(tos.next().utc_ymdhms.min, 0);
+    test_assert_signed_eq(tos.next().utc_ymdhms.sec, 0);
+
+    test_assert(tos.next().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.next().tai_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.next().tai_ymdhms.month, 7);
+    test_assert_signed_eq(tos.next().tai_ymdhms.day, 1);
+    test_assert_signed_eq(tos.next().tai_ymdhms.hour, 0);
+    test_assert_signed_eq(tos.next().tai_ymdhms.min, 0);
+    test_assert_signed_eq(tos.next().tai_ymdhms.sec, 36);
+
+    test_assert(tos.next().next_leap_second_time_until == -1);
+    test_assert(tos.next().next_leap_second_direction == 1);
+    test_assert(tos.next().next_leap_second_valid);
+
+    tos.top_of_second_has_passed();
+
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)4);
+
+    test_assert(tos.prev().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.month, 7);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.day, 1);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.hour, 0);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.min, 0);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.sec, 0);
+
+    test_assert(tos.prev().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.month, 7);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.day, 1);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.hour, 0);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.min, 0);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.sec, 36);
+
+    test_assert(tos.prev().next_leap_second_time_until == -1);
+    test_assert(tos.prev().next_leap_second_direction == 1);
+    test_assert(tos.prev().next_leap_second_valid);
+
+    test_assert(tos.next().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.next().utc_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.next().utc_ymdhms.month, 7);
+    test_assert_signed_eq(tos.next().utc_ymdhms.day, 1);
+    test_assert_signed_eq(tos.next().utc_ymdhms.hour, 0);
+    test_assert_signed_eq(tos.next().utc_ymdhms.min, 0);
+    test_assert_signed_eq(tos.next().utc_ymdhms.sec, 1);
+
+    test_assert(tos.next().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.next().tai_ymdhms.year, 2015);
+    test_assert_signed_eq(tos.next().tai_ymdhms.month, 7);
+    test_assert_signed_eq(tos.next().tai_ymdhms.day, 1);
+    test_assert_signed_eq(tos.next().tai_ymdhms.hour, 0);
+    test_assert_signed_eq(tos.next().tai_ymdhms.min, 0);
+    test_assert_signed_eq(tos.next().tai_ymdhms.sec, 37);
+
+    test_assert(tos.next().next_leap_second_time_until == -2);
+    test_assert(tos.next().next_leap_second_direction == 1);
+    test_assert(tos.next().next_leap_second_valid);
+
+    // Test a hypothetical 2025 negative leap second
+    tos.prev().set_utc_ymdhms(2025, 12, 31, 23, 59, 0);
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)5); // One error from the skip in UTC
+    tos.next().set_from_prev_second(tos.prev());
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)5);
+
+    tos.prev().set_gps_minus_utc(18);
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)6); // One error from the skip in TAI
+    tos.prev().set_next_leap_second(59, -1);
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)6);
+    tos.next().set_from_prev_second(tos.prev());
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)6);
+
+    test_assert(tos.prev().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.year, 2025);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.month, 12);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.day, 31);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.hour, 23);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.min, 59);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.sec, 0);
+
+    test_assert(tos.prev().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.year, 2025);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.month, 12);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.day, 31);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.hour, 23);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.min, 59);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.sec, 37);
+
+    test_assert(tos.prev().next_leap_second_time_until == 59);
+    test_assert(tos.prev().next_leap_second_direction == -1);
+    test_assert(tos.prev().next_leap_second_valid);
+
+    test_assert(tos.next().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.next().utc_ymdhms.year, 2025);
+    test_assert_signed_eq(tos.next().utc_ymdhms.month, 12);
+    test_assert_signed_eq(tos.next().utc_ymdhms.day, 31);
+    test_assert_signed_eq(tos.next().utc_ymdhms.hour, 23);
+    test_assert_signed_eq(tos.next().utc_ymdhms.min, 59);
+    test_assert_signed_eq(tos.next().utc_ymdhms.sec, 1);
+
+    test_assert(tos.next().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.next().tai_ymdhms.year, 2025);
+    test_assert_signed_eq(tos.next().tai_ymdhms.month, 12);
+    test_assert_signed_eq(tos.next().tai_ymdhms.day, 31);
+    test_assert_signed_eq(tos.next().tai_ymdhms.hour, 23);
+    test_assert_signed_eq(tos.next().tai_ymdhms.min, 59);
+    test_assert_signed_eq(tos.next().tai_ymdhms.sec, 38);
+
+    test_assert(tos.next().next_leap_second_time_until == 58);
+    test_assert(tos.next().next_leap_second_direction == -1);
+    test_assert(tos.next().next_leap_second_valid);
+
+    for (int i = 0; i < 57; ++i)
+    {
+        tos.top_of_second_has_passed();
+    }
+
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)6);
+
+    test_assert(tos.prev().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.year, 2025);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.month, 12);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.day, 31);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.hour, 23);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.min, 59);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.sec, 57);
+
+    test_assert(tos.prev().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.year, 2026);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.month, 1);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.day, 1);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.hour, 0);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.min, 0);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.sec, 34);
+
+    test_assert(tos.prev().next_leap_second_time_until == 2);
+    test_assert(tos.prev().next_leap_second_direction == -1);
+    test_assert(tos.prev().next_leap_second_valid);
+
+    test_assert(tos.next().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.next().utc_ymdhms.year, 2025);
+    test_assert_signed_eq(tos.next().utc_ymdhms.month, 12);
+    test_assert_signed_eq(tos.next().utc_ymdhms.day, 31);
+    test_assert_signed_eq(tos.next().utc_ymdhms.hour, 23);
+    test_assert_signed_eq(tos.next().utc_ymdhms.min, 59);
+    test_assert_signed_eq(tos.next().utc_ymdhms.sec, 58);
+
+    test_assert(tos.next().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.next().tai_ymdhms.year, 2026);
+    test_assert_signed_eq(tos.next().tai_ymdhms.month, 1);
+    test_assert_signed_eq(tos.next().tai_ymdhms.day, 1);
+    test_assert_signed_eq(tos.next().tai_ymdhms.hour, 0);
+    test_assert_signed_eq(tos.next().tai_ymdhms.min, 0);
+    test_assert_signed_eq(tos.next().tai_ymdhms.sec, 35);
+
+    test_assert(tos.next().next_leap_second_time_until == 1);
+    test_assert(tos.next().next_leap_second_direction == -1);
+    test_assert(tos.next().next_leap_second_valid);
+
+    tos.top_of_second_has_passed();
+
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)6);
+
+    test_assert(tos.prev().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.year, 2025);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.month, 12);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.day, 31);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.hour, 23);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.min, 59);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.sec, 58);
+
+    test_assert(tos.prev().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.year, 2026);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.month, 1);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.day, 1);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.hour, 0);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.min, 0);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.sec, 35);
+
+    test_assert(tos.prev().next_leap_second_time_until == 1);
+    test_assert(tos.prev().next_leap_second_direction == -1);
+    test_assert(tos.prev().next_leap_second_valid);
+
+    test_assert(tos.next().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.next().utc_ymdhms.year, 2026);
+    test_assert_signed_eq(tos.next().utc_ymdhms.month, 1);
+    test_assert_signed_eq(tos.next().utc_ymdhms.day, 1);
+    test_assert_signed_eq(tos.next().utc_ymdhms.hour, 0);
+    test_assert_signed_eq(tos.next().utc_ymdhms.min, 0);
+    test_assert_signed_eq(tos.next().utc_ymdhms.sec, 0);
+
+    test_assert(tos.next().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.next().tai_ymdhms.year, 2026);
+    test_assert_signed_eq(tos.next().tai_ymdhms.month, 1);
+    test_assert_signed_eq(tos.next().tai_ymdhms.day, 1);
+    test_assert_signed_eq(tos.next().tai_ymdhms.hour, 0);
+    test_assert_signed_eq(tos.next().tai_ymdhms.min, 0);
+    test_assert_signed_eq(tos.next().tai_ymdhms.sec, 36);
+
+    test_assert(tos.next().next_leap_second_time_until == 0);
+    test_assert(tos.next().next_leap_second_direction == -1);
+    test_assert(tos.next().next_leap_second_valid);
+
+    tos.top_of_second_has_passed();
+
+    test_assert_unsigned_eq(tos.error_count(), (uint32_t)6);
+
+    test_assert(tos.prev().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.year, 2026);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.month, 1);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.day, 1);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.hour, 0);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.min, 0);
+    test_assert_signed_eq(tos.prev().utc_ymdhms.sec, 0);
+
+    test_assert(tos.prev().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.year, 2026);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.month, 1);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.day, 1);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.hour, 0);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.min, 0);
+    test_assert_signed_eq(tos.prev().tai_ymdhms.sec, 36);
+
+    test_assert(tos.prev().next_leap_second_time_until == 0);
+    test_assert(tos.prev().next_leap_second_direction == -1);
+    test_assert(tos.prev().next_leap_second_valid);
+
+    test_assert(tos.next().utc_ymdhms_valid);
+    test_assert_signed_eq(tos.next().utc_ymdhms.year, 2026);
+    test_assert_signed_eq(tos.next().utc_ymdhms.month, 1);
+    test_assert_signed_eq(tos.next().utc_ymdhms.day, 1);
+    test_assert_signed_eq(tos.next().utc_ymdhms.hour, 0);
+    test_assert_signed_eq(tos.next().utc_ymdhms.min, 0);
+    test_assert_signed_eq(tos.next().utc_ymdhms.sec, 1);
+
+    test_assert(tos.next().tai_ymdhms_valid);
+    test_assert_signed_eq(tos.next().tai_ymdhms.year, 2026);
+    test_assert_signed_eq(tos.next().tai_ymdhms.month, 1);
+    test_assert_signed_eq(tos.next().tai_ymdhms.day, 1);
+    test_assert_signed_eq(tos.next().tai_ymdhms.hour, 0);
+    test_assert_signed_eq(tos.next().tai_ymdhms.min, 0);
+    test_assert_signed_eq(tos.next().tai_ymdhms.sec, 37);
+
+    test_assert(tos.next().next_leap_second_time_until == -1);
+    test_assert(tos.next().next_leap_second_direction == -1);
+    test_assert(tos.next().next_leap_second_valid);
+
     return true;
 }
 

@@ -219,7 +219,7 @@ int main()
         if (wwvb_needs_top_of_second)
         {
             wwvb_needs_top_of_second = false;
-            wwvb_raise_power_us = wwvb.top_of_second(gps.tops_of_seconds().prev().utc_ymdhms);
+            wwvb_raise_power_us = wwvb.top_of_second(gps.tops_of_seconds().prev());
         }
 
         usec_t wwvb_raise_power_time_us = pps->get_time_us_of(completed_seconds, wwvb_raise_power_us);

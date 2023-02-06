@@ -37,9 +37,16 @@ namespace
     }
 }
 
-uint32_t Wwvb::top_of_second(Ymdhms const & utc)
+uint32_t Wwvb::top_of_second(TopOfSecond const & tos)
 {
+    if (!tos.utc_ymdhms_valid)
+    {
+        return 100000000; // Never
+    }
+
     _reduce.on();
+
+    Ymdhms const & utc = tos.utc_ymdhms;
 
     uint64_t markers = 0;
     markers |= static_cast<uint64_t>(1) << 0;
@@ -105,7 +112,11 @@ uint32_t Wwvb::top_of_second(Ymdhms const & utc)
         time_code |= static_cast<uint64_t>(1) << 55;
     }
 
-    // TODO WARN OF LEAP SECOND
+    if (tos.next_leap_second_time_until < 27 * secs_per_day &&
+        tos.next_leap_second_time_until >= 0)
+    {
+        time_code |= static_cast<uint64_t>(1) << 56;
+    }
 
     // TODO DST STATUS
 

@@ -11,7 +11,7 @@ public:
     void set_carrier(bool enabled);
 
     // Returns the time within the second in microseconds for the raise_power() callback.
-    uint32_t top_of_second(Ymdhms const & utc);
+    uint32_t top_of_second(TopOfSecond const & tos);
     void raise_power();
 
 private:
