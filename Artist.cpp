@@ -1,4 +1,5 @@
 #include "Artist.h"
+#include "iana_time_zones.h"
 
 Artist::Artist(Display & display,
                Buttons & buttons,
@@ -10,13 +11,14 @@ Artist::Artist(Display & display,
     using namespace std;
 
     vector<tuple<string, shared_ptr<TimeRepresentation>>> time_reps;
-    time_reps.push_back(make_tuple("Pacific Standard Time",      make_shared<TimeZone>("PST", -8 * secs_per_hour)));
-    time_reps.push_back(make_tuple("Pacific Daylight Time",      make_shared<TimeZone>("PDT", -7 * secs_per_hour)));
-    time_reps.push_back(make_tuple("Central Standard Time",      make_shared<TimeZone>("CST", -6 * secs_per_hour)));
-    time_reps.push_back(make_tuple("Central Daylight Time",      make_shared<TimeZone>("CDT", -5 * secs_per_hour)));
-    time_reps.push_back(make_tuple("Coordinated Universal Time", make_shared<TimeZone>("UTC", 0)));
     time_reps.push_back(make_tuple("International Atomic Time",  make_shared<TimeRepTai>()));
-    time_reps.push_back(make_tuple("Taiwan Time",                make_shared<TimeZone>("TWT",  8 * secs_per_hour)));
+    time_reps.push_back(make_tuple("Coordinated Universal Time", make_shared<TimeZoneFixed>("UTC", 0, false)));
+    printf("Hello!\n");
+    for (auto const & zone : get_iana_timezones())
+    {
+        printf("World!\n");
+        time_reps.push_back(zone);
+    }
 
     vector<tuple<string, shared_ptr<LinePrinter>>> line_options;
     for (auto & x : time_reps)
@@ -27,15 +29,28 @@ Artist::Artist(Display & display,
     }
 
     auto contents = make_unique<Menu>("Contents");
-    array<size_t, Display::num_lines> defaults = {0, 2, 6, 4, 5};
+    array<std::string, Display::num_lines> defaults = {
+            "America/Los_Angeles",
+            "America/Chicago",
+            "Asia/Taipei",
+            "Coordinated Universal Time",
+            "International Atomic Time",
+        };
     for (size_t line = 0; line < Display::num_lines; ++line)
     {
         auto radiobutton = make_unique<Radiobutton<LinePrinter>>("Line " + to_string(line + 1));
-        for (auto & x : line_options)
+        string const & default_name = defaults[line];
+        size_t default_idx = 0;
+        for (size_t idx = 0; idx < line_options.size(); ++idx)
         {
-            radiobutton->add_item(get<string>(x), get<shared_ptr<LinePrinter>>(x));
+            string const & name = get<string>(line_options[idx]);
+            radiobutton->add_item(name, get<shared_ptr<LinePrinter>>(line_options[idx]));
+            if (name == default_name)
+            {
+                default_idx = idx;
+            }
         }
-        radiobutton->set_selection(defaults[line]);
+        radiobutton->set_selection(default_idx);
         Radiobutton<LinePrinter> & rb_ref = *radiobutton;
         _main_display_contents[line] = [&rb_ref]()->LinePrinter&{ return rb_ref.get(); };
         contents->add_item(move(radiobutton));
@@ -81,7 +96,7 @@ void TimePrinter::print(size_t line, uint8_t tenths)
         print_result = _disp.printf(
             line,
             "%-4s%04d.%02d.%02d %02d.%02d.%02d.%d",
-            _time_rep->abbrev().c_str(),
+            _time_rep->abbrev(_gps.tops_of_seconds().prev().utc_ymdhms).c_str(),
             ymdhms.year,
             ymdhms.month,
             ymdhms.day,

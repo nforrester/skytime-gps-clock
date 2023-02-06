@@ -1,0 +1,253 @@
+#include <stdio.h>
+#include <fstream>
+#include <sstream>
+#include <iostream>
+#include <string>
+#include <array>
+#include <regex>
+#include <limits>
+
+#include "time.h"
+
+std::string shell(std::string const & command)
+{
+    FILE* pipe = popen(command.c_str(), "r");
+
+    std::ostringstream output;
+    std::array<char, 1000> buffer;
+    while (fgets(buffer.data(), buffer.size(), pipe) != NULL)
+    {
+        output << buffer.data();
+    }
+
+    pclose(pipe);
+
+    return output.str();
+}
+
+std::vector<TimeZoneIana::Eon> zdump(std::string const & time_zone_name, int start_year, int end_year)
+{
+    std::istringstream zdump_output(shell("zdump -v " + time_zone_name));
+
+    std::array<std::string, 12> month_names = {
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    };
+
+    std::ostringstream month_regex_str;
+    month_regex_str << "(";
+    bool first_month = true;
+    for (auto const & month : month_names)
+    {
+        if (!first_month)
+        {
+            month_regex_str << "|";
+        }
+        first_month = false;
+        month_regex_str << month;
+    }
+    month_regex_str << ")";
+
+    std::string weekday_regex_str = "(Sun|Mon|Tue|Wed|Thu|Fri|Sat)";
+
+    std::ostringstream line_regex_str;
+    line_regex_str << "^" << time_zone_name << " +" << weekday_regex_str << " +";
+    line_regex_str << month_regex_str.str();
+    line_regex_str << " +(\\d+) +(\\d\\d):(\\d\\d):(\\d\\d) (-?\\d+) UT += +" << weekday_regex_str << " +";
+    line_regex_str << month_regex_str.str();
+    line_regex_str << " +\\d+ +\\d\\d:\\d\\d:\\d\\d -?\\d+ ([A-Z+0-9]+) +isdst=([01]) +gmtoff=(-?\\d+)$";
+    std::regex line_regex(line_regex_str.str(), std::regex_constants::ECMAScript);
+
+    std::regex fail_regex("\\((gmtime|localtime) failed\\)", std::regex_constants::ECMAScript);
+
+    std::vector<TimeZoneIana::Eon> raw_eons;
+
+    std::string line;
+    while (std::getline(zdump_output, line, '\n'))
+    {
+        std::match_results<std::string::const_iterator> match;
+        if (std::regex_search(line, match, fail_regex))
+        {
+            continue;
+        }
+        if (!std::regex_match(line, match, line_regex))
+        {
+            std::cerr << line << "\n";
+            throw std::runtime_error("no match");
+        }
+        if (match.size() != 13)
+        {
+            std::cerr << line << "\n";
+            throw std::runtime_error("not enough groups");
+        }
+        auto group = match.cbegin();
+        group += 2;
+        std::string const month_str = group++->str();
+        std::string const day_str = group++->str();
+        std::string const hour_str = group++->str();
+        std::string const min_str = group++->str();
+        std::string const sec_str = group++->str();
+        std::string const year_str = group++->str();
+        group += 2;
+        std::string const abbreviation = group++->str();
+        std::string const isdst_str = group++->str();
+        std::string const gmtoff_str = group++->str();
+
+        TimeZoneIana::Eon eon;
+
+        eon.date.month = 0;
+        for (size_t i = 0; i < month_names.size(); ++i)
+        {
+            if (month_str == month_names.at(i))
+            {
+                eon.date.month = i + 1;
+                break;
+            }
+        }
+        if (eon.date.month == 0)
+        {
+            std::cerr << line << "\n";
+            throw std::runtime_error("unable to parse month");
+        }
+
+        eon.date.day = std::stoi(day_str);
+        eon.date.hour = std::stoi(hour_str);
+        eon.date.min = std::stoi(min_str);
+        eon.date.sec = std::stoi(sec_str);
+
+        auto year = std::stoll(year_str);
+        if (year < std::numeric_limits<decltype(eon.date.year)>::lowest())
+        {
+            year = std::numeric_limits<decltype(eon.date.year)>::lowest();
+        }
+        if (year > std::numeric_limits<decltype(eon.date.year)>::max())
+        {
+            year = std::numeric_limits<decltype(eon.date.year)>::max();
+        }
+        eon.date.year = year;
+
+        eon.abbreviation = abbreviation;
+        eon.is_dst = isdst_str == "1";
+        eon.utc_offset = std::stoi(gmtoff_str);
+
+        raw_eons.push_back(eon);
+    }
+
+    if (raw_eons.size() == 0)
+    {
+        throw std::runtime_error("no lines remain in zdump output after filtering");
+    }
+    if (raw_eons.size() % 2 != 0)
+    {
+        throw std::runtime_error("odd number of lines remain in zdump output after filtering");
+    }
+
+    std::vector<TimeZoneIana::Eon> eons;
+    // Find the last entry before start_year
+    for (size_t i = 0; i + 1 < raw_eons.size(); ++i)
+    {
+        TimeZoneIana::Eon const & this_one = raw_eons.at(i);
+        TimeZoneIana::Eon const & next_one = raw_eons.at(i+1);
+        if (this_one.date.year < start_year && next_one.date.year >= start_year)
+        {
+            eons.push_back(this_one);
+            break;
+        }
+    }
+    if (eons.size() != 1)
+    {
+        throw std::runtime_error("unable to identify the final entry before start_year");
+    }
+
+    for (size_t i = 1; i + 1 < raw_eons.size(); i += 2)
+    {
+        TimeZoneIana::Eon const & pre = raw_eons.at(i);
+        TimeZoneIana::Eon const & post = raw_eons.at(i+1);
+        Ymdhms test_date = pre.date;
+        test_date.add_seconds(1);
+        if (test_date != post.date)
+        {
+            throw std::runtime_error("only local time may be discontinuous, not UTC\n");
+        }
+        if (post.date.year >= start_year && post.date.year < end_year)
+        {
+            eons.push_back(post);
+        }
+    }
+
+    return eons;
+}
+
+void assert_string_safe_for_literal(std::string const & s)
+{
+    std::string static const allowed_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ/_";
+    for (char c : s)
+    {
+        if (std::string::npos == allowed_chars.find_first_of(c))
+        {
+            throw std::runtime_error("Unexpected character");
+        }
+    }
+}
+
+void dump_cpp(std::ostream & cpp, std::vector<std::tuple<std::string, std::vector<TimeZoneIana::Eon>>> const & zones)
+{
+    cpp << "#include \"../iana_time_zones.h\"\n";
+    cpp << "\n";
+    cpp << "std::vector<std::tuple<std::string, std::shared_ptr<TimeRepresentation>>> get_iana_timezones()\n";
+    cpp << "{\n";
+    cpp << "    using namespace std;\n";
+    cpp << "    vector<tuple<string, shared_ptr<TimeRepresentation>>> timezones;\n";
+    for (auto const & zone : zones)
+    {
+        auto const & name = get<std::string>(zone);
+        auto const & eons = get<std::vector<TimeZoneIana::Eon>>(zone);
+
+        assert_string_safe_for_literal(name);
+
+        cpp << "    timezones.push_back(make_tuple(\n";
+        cpp << "        \"" << name << "\",\n";
+        cpp << "        make_shared<TimeZoneIana>(vector<TimeZoneIana::Eon>({\n";
+        for (TimeZoneIana::Eon const & eon : eons)
+        {
+            assert_string_safe_for_literal(eon.abbreviation);
+            cpp << "            { ";
+            cpp << ".date = Ymdhms(" << static_cast<int>(eon.date.year);
+            cpp << ", " << static_cast<int>(eon.date.month);
+            cpp << ", " << static_cast<int>(eon.date.day);
+            cpp << ", " << static_cast<int>(eon.date.hour);
+            cpp << ", " << static_cast<int>(eon.date.min);
+            cpp << ", " << static_cast<int>(eon.date.sec);
+            cpp << "), .abbreviation = \"" << eon.abbreviation;
+            cpp << "\", .is_dst = " << (eon.is_dst ? "true" : "false");
+            cpp << ", .utc_offset = " << eon.utc_offset;
+            cpp << " },\n";
+        }
+        cpp << "        }))));\n";
+    }
+    cpp << "    return timezones;\n";
+    cpp << "}\n";
+}
+
+int main()
+{
+    std::vector<std::string> zones_to_generate = {
+        "America/Los_Angeles",
+        "America/Denver",
+        "America/Chicago",
+        "America/New_York",
+        "Europe/London",
+        "Asia/Kolkata",
+        "Asia/Taipei",
+    };
+
+    std::vector<std::tuple<std::string, std::vector<TimeZoneIana::Eon>>> zones;
+
+    for (auto const & name : zones_to_generate)
+    {
+        zones.push_back(std::make_tuple(name, zdump(name, 2020, 2040)));
+    }
+
+    dump_cpp(std::cout, zones);
+
+    return 0;
+}

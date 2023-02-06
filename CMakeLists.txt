@@ -22,6 +22,7 @@ add_executable(gps_clock
     Buttons.cpp
     Artist.cpp
     Wwvb.cpp
+    gen/iana_time_zones.cpp
 )
 
 pico_enable_stdio_usb(gps_clock 1)

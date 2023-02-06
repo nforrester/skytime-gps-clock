@@ -1,7 +1,12 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 #include <string>
+
+#if __cpp_exceptions
+#include <stdexcept>
+#endif
 
 #include "util.h"
 
@@ -40,6 +45,51 @@ struct Ymdhms
 
     uint16_t day_of_year() const;
     bool is_leap_year() const;
+
+    bool operator==(Ymdhms const & other) const
+    {
+        return year == other.year
+            && month == other.month
+            && day == other.day
+            && hour == other.hour
+            && min == other.min
+            && sec == other.sec;
+    }
+
+    bool operator<(Ymdhms const & other) const
+    {
+        if (year  < other.year ) { return true; } else if (year  > other.year ) { return false; } else
+        if (month < other.month) { return true; } else if (month > other.month) { return false; } else
+        if (day   < other.day  ) { return true; } else if (day   > other.day  ) { return false; } else
+        if (hour  < other.hour ) { return true; } else if (hour  > other.hour ) { return false; } else
+        if (min   < other.min  ) { return true; } else if (min   > other.min  ) { return false; } else
+        if (sec   < other.sec  ) { return true; } else { return false; }
+    }
+
+    bool operator!=(Ymdhms const & other) const
+    {
+        return !(*this == other);
+    }
+
+    bool operator<=(Ymdhms const & other) const
+    {
+        return (*this < other) || (*this == other);
+    }
+
+    bool operator>(Ymdhms const & other) const
+    {
+        return !(*this <= other);
+    }
+
+    bool operator>=(Ymdhms const & other) const
+    {
+        return !(*this < other);
+    }
+
+    void print() const
+    {
+        printf("%d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, min, sec);
+    }
 
 private:
     int64_t _to_gdays() const;
@@ -153,22 +203,15 @@ private:
 class TimeRepresentation
 {
 public:
-    TimeRepresentation(std::string const & abbrev): _abbrev(abbrev) {}
-    //virtual ~TimeRepresentation() {}
-
-    std::string const & abbrev() const { return _abbrev; }
-
     virtual bool make_ymdhms(TopOfSecond const & top_of_second, Ymdhms & ymdhms) const = 0;
-
-private:
-    std::string _abbrev;
+    virtual std::string const & abbrev() const = 0;
+    virtual std::string const & abbrev(Ymdhms const & utc) const = 0;
+    virtual bool is_dst(Ymdhms const & utc) const = 0;
 };
 
 class TimeRepTai: public TimeRepresentation
 {
 public:
-    TimeRepTai(): TimeRepresentation("TAI") {}
-
     bool make_ymdhms(TopOfSecond const & top_of_second, Ymdhms & ymdhms) const override
     {
         if (!top_of_second.tai_ymdhms_valid)
@@ -178,14 +221,33 @@ public:
         ymdhms = top_of_second.tai_ymdhms;
         return true;
     }
+
+    std::string const & abbrev() const override
+    {
+        return _abbrev;
+    }
+
+    std::string const & abbrev(Ymdhms const &) const override
+    {
+        return _abbrev;
+    }
+
+    bool is_dst(Ymdhms const &) const override
+    {
+        return false;
+    }
+
+private:
+    std::string static constexpr _abbrev = "TAI";
 };
 
-class TimeZone: public TimeRepresentation
+class TimeZoneFixed: public TimeRepresentation
 {
 public:
-    TimeZone(std::string const & abbrev, int32_t utc_offset_seconds):
-        TimeRepresentation(abbrev),
-        _utc_offset_seconds(utc_offset_seconds)
+    TimeZoneFixed(std::string const & abbrev, int32_t utc_offset_seconds, bool is_dst_):
+        _abbrev(abbrev),
+        _utc_offset_seconds(utc_offset_seconds),
+        _is_dst(is_dst_)
     {}
 
     bool make_ymdhms(TopOfSecond const & top_of_second, Ymdhms & ymdhms) const override
@@ -199,6 +261,120 @@ public:
         return true;
     }
 
+    std::string const & abbrev() const override
+    {
+        return _abbrev;
+    }
+
+    std::string const & abbrev(Ymdhms const &) const override
+    {
+        return _abbrev;
+    }
+
+    bool is_dst(Ymdhms const &) const override
+    {
+        return _is_dst;
+    }
+
 private:
+    std::string const _abbrev;
     int32_t _utc_offset_seconds;
+    bool _is_dst;
+};
+
+class TimeZoneIana: public TimeRepresentation
+{
+public:
+    struct Eon
+    {
+        Ymdhms date;
+        std::string abbreviation;
+        bool is_dst;
+        int utc_offset;
+    };
+
+    TimeZoneIana(std::vector<Eon> const & eons): _eons(eons)
+    {
+        #if __cpp_exceptions
+        if (_eons.size() == 0)
+        {
+            throw std::runtime_error("Need at least one Eon to make a TimeZoneIana");
+        }
+        #endif
+    }
+
+    bool make_ymdhms(TopOfSecond const & top_of_second, Ymdhms & ymdhms) const override
+    {
+        if (!top_of_second.utc_ymdhms_valid)
+        {
+            return false;
+        }
+        Eon const * eon = _find_eon(top_of_second.utc_ymdhms);
+        if (eon == nullptr)
+        {
+            return false;
+        }
+        ymdhms = top_of_second.utc_ymdhms;
+        ymdhms.add_seconds(eon->utc_offset);
+        return true;
+    }
+
+    std::string const & abbrev() const override
+    {
+        return _eons[0].abbreviation;
+    }
+
+    std::string const & abbrev(Ymdhms const & utc) const override
+    {
+        Eon const * eon = _find_eon(utc);
+        if (eon == nullptr)
+        {
+            return abbrev();
+        }
+        return eon->abbreviation;
+    }
+
+    bool is_dst(Ymdhms const & utc) const override
+    {
+        Eon const * eon = _find_eon(utc);
+        if (eon == nullptr)
+        {
+            return false;
+        }
+        return eon->is_dst;
+    }
+
+private:
+    std::vector<Eon> const _eons;
+
+    Eon const * _find_eon(Ymdhms const & utc) const
+    {
+        if (_eons.size() == 0)
+        {
+            return nullptr;
+        }
+        if (_eons.front().date > utc)
+        {
+            return nullptr;
+        }
+        if (_eons.back().date <= utc)
+        {
+            return &_eons.back();
+        }
+        size_t idx_leq = 0;
+        size_t idx_gt = _eons.size() - 1;
+        while (idx_gt - idx_leq > 1)
+        {
+            size_t idx_mid = idx_leq + ((idx_gt - idx_leq) / 2);
+            if (_eons[idx_mid].date <= utc)
+            {
+                idx_leq = idx_mid;
+            }
+            else
+            {
+                idx_gt = idx_mid;
+            }
+        }
+        return &_eons[idx_leq];
+    }
 };
