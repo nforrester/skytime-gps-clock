@@ -32,6 +32,7 @@
 #include "GpsUBlox.h"
 #include "Buttons.h"
 #include "Artist.h"
+#include "Wwvb.h"
 
 std::unique_ptr<Pps> pps;
 
@@ -131,6 +132,12 @@ int main()
     Artist artist(display, buttons, gps);
     printf("Artist init complete.\n");
 
+    uint constexpr wwvb_carrier_pin = 20;
+    uint constexpr wwvb_reduce_pin = 19;
+    bi_decl(bi_1pin_with_name(wwvb_carrier_pin, "WWVB CARRIER"));
+    bi_decl(bi_1pin_with_name(wwvb_reduce_pin, "WWVB REDUCE"));
+    Wwvb wwvb(wwvb_carrier_pin, wwvb_reduce_pin);
+
     led.on();
 
     printf("Launching PPS monitoring thread.\n");
@@ -176,6 +183,8 @@ int main()
                    gps.tops_of_seconds().error_count(),
                    buttons.error_count(),
                    artist.error_count());
+
+            wwvb.set_carrier(tenths % 2 == 0);
         }
 
         usec_t button_poll_time_us = pps->get_time_us_of(completed_seconds, next_button_poll_us);
