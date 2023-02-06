@@ -38,6 +38,9 @@ struct Ymdhms
 
     void add_seconds(int32_t dt_seconds);
 
+    uint16_t day_of_year() const;
+    bool is_leap_year() const;
+
 private:
     int64_t _to_gdays() const;
     void _from_gdays(int64_t gdays);

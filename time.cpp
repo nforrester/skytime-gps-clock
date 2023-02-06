@@ -42,6 +42,21 @@ void Ymdhms::_from_dsecs(int32_t dsecs)
     sec = dsecs;
 }
 
+uint16_t Ymdhms::day_of_year() const
+{
+    int64_t g_today = _to_gdays();
+    Ymdhms start_of_year(year, 1, 1, 0, 0, 0);
+    int64_t g_start = start_of_year._to_gdays();
+    return g_today - g_start + 1;
+}
+
+bool Ymdhms::is_leap_year() const
+{
+    Ymdhms leap_test_date(year, 2, 28, 0, 0, 0);
+    leap_test_date.add_days(1);
+    return leap_test_date.month == 2;
+}
+
 int64_t Ymdhms::_to_gdays() const
 {
     int64_t m = (month + 9) % 12;
