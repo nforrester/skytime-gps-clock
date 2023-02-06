@@ -137,6 +137,8 @@ int main()
     bi_decl(bi_1pin_with_name(wwvb_carrier_pin, "WWVB CARRIER"));
     bi_decl(bi_1pin_with_name(wwvb_reduce_pin, "WWVB REDUCE"));
     Wwvb wwvb(wwvb_carrier_pin, wwvb_reduce_pin);
+    wwvb.set_carrier(false);
+    printf("WWVB init complete.\n");
 
     led.on();
 
@@ -147,6 +149,8 @@ int main()
     uint32_t prev_completed_seconds = 0;
     uint32_t next_display_update_us = 0;
     uint32_t next_button_poll_us = 10000;
+    bool wwvb_needs_top_of_second = false;
+    uint32_t wwvb_raise_power_us = 100000000; // Never
     while (true)
     {
         gps.dispatch();
@@ -163,6 +167,19 @@ int main()
             next_button_poll_us = 10000;
             gps.pps_lock_state(pps->locked());
             gps.pps_pulsed();
+
+            if (pps->locked())
+            {
+                wwvb.set_carrier(true);
+                wwvb_needs_top_of_second = true;
+                wwvb_raise_power_us = 100000000; // Never
+            }
+            else
+            {
+                wwvb.set_carrier(false);
+                wwvb_needs_top_of_second = false;
+                wwvb_raise_power_us = 100000000; // Never
+            }
         }
 
         usec_t display_update_time_us = pps->get_time_us_of(completed_seconds, next_display_update_us);
@@ -183,8 +200,6 @@ int main()
                    gps.tops_of_seconds().error_count(),
                    buttons.error_count(),
                    artist.error_count());
-
-            wwvb.set_carrier(tenths % 2 == 0);
         }
 
         usec_t button_poll_time_us = pps->get_time_us_of(completed_seconds, next_button_poll_us);
@@ -199,6 +214,18 @@ int main()
         while (buttons.get_button(button))
         {
             artist.button_pressed(button);
+        }
+
+        if (wwvb_needs_top_of_second)
+        {
+            wwvb_needs_top_of_second = false;
+            wwvb_raise_power_us = wwvb.top_of_second(gps.tops_of_seconds().prev().utc_ymdhms);
+        }
+
+        usec_t wwvb_raise_power_time_us = pps->get_time_us_of(completed_seconds, wwvb_raise_power_us);
+        if (wwvb_raise_power_time_us <= time_us_64())
+        {
+            wwvb.raise_power();
         }
     }
 }
