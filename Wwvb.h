@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "time.h"
 #include "Gpio.h"
 
@@ -23,4 +25,6 @@ private:
     uint16_t static constexpr _pwm_count_wrap = 125000000 / _pwm_freq;
     uint16_t static constexpr _pwm_count_half = _pwm_count_wrap / 2;
     uint16_t static constexpr _pwm_count_off = 0;
+
+    std::shared_ptr<TimeRepresentation> _pacific_time_zone;
 };

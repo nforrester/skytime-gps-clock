@@ -13,10 +13,8 @@ Artist::Artist(Display & display,
     vector<tuple<string, shared_ptr<TimeRepresentation>>> time_reps;
     time_reps.push_back(make_tuple("International Atomic Time",  make_shared<TimeRepTai>()));
     time_reps.push_back(make_tuple("Coordinated Universal Time", make_shared<TimeZoneFixed>("UTC", 0, false)));
-    printf("Hello!\n");
     for (auto const & zone : get_iana_timezones())
     {
-        printf("World!\n");
         time_reps.push_back(zone);
     }
 

@@ -193,10 +193,14 @@ void dump_cpp(std::ostream & cpp, std::vector<std::tuple<std::string, std::vecto
 {
     cpp << "#include \"../iana_time_zones.h\"\n";
     cpp << "\n";
-    cpp << "std::vector<std::tuple<std::string, std::shared_ptr<TimeRepresentation>>> get_iana_timezones()\n";
+    cpp << "std::vector<std::tuple<std::string, std::shared_ptr<TimeRepresentation>>> const & get_iana_timezones()\n";
     cpp << "{\n";
     cpp << "    using namespace std;\n";
-    cpp << "    vector<tuple<string, shared_ptr<TimeRepresentation>>> timezones;\n";
+    cpp << "    vector<tuple<string, shared_ptr<TimeRepresentation>>> static timezones;\n";
+    cpp << "    if (timezones.size() > 0)\n";
+    cpp << "    {\n";
+    cpp << "        return timezones;\n";
+    cpp << "    }\n";
     for (auto const & zone : zones)
     {
         auto const & name = get<std::string>(zone);
@@ -232,11 +236,11 @@ int main()
 {
     std::vector<std::string> zones_to_generate = {
         "America/Los_Angeles",
-        "America/Denver",
+        //"America/Denver",
         "America/Chicago",
-        "America/New_York",
-        "Europe/London",
-        "Asia/Kolkata",
+        //"America/New_York",
+        //"Europe/London",
+        //"Asia/Kolkata",
         "Asia/Taipei",
     };
 

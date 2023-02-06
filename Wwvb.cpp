@@ -1,6 +1,7 @@
 #include "hardware/pwm.h"
 
 #include "Wwvb.h"
+#include "iana_time_zones.h"
 
 Wwvb::Wwvb(uint carrier_pin, uint reduce_pin):
     _reduce(reduce_pin)
@@ -14,6 +15,14 @@ Wwvb::Wwvb(uint carrier_pin, uint reduce_pin):
     pwm_set_wrap(_carrier_pwm_slice, _pwm_count_wrap);
     pwm_set_chan_level(_carrier_pwm_slice, _carrier_pwm_channel, _pwm_count_off);
     pwm_set_enabled(_carrier_pwm_slice, true);
+
+    for (auto const & zone : get_iana_timezones())
+    {
+        if (std::get<std::string>(zone) == "America/Los_Angeles")
+        {
+            _pacific_time_zone = std::get<decltype(_pacific_time_zone)>(zone);
+        }
+    }
 }
 
 void Wwvb::set_carrier(bool enabled)
@@ -118,7 +127,24 @@ uint32_t Wwvb::top_of_second(TopOfSecond const & tos)
         time_code |= static_cast<uint64_t>(1) << 56;
     }
 
-    // TODO DST STATUS
+    Ymdhms start_today = utc;
+    start_today.hour = 0;
+    start_today.min = 0;
+    start_today.sec = 0;
+    Ymdhms start_tomorrow = start_today;
+    start_tomorrow.add_days(1);
+
+    bool const dst_start_today = _pacific_time_zone->is_dst(start_today);
+    bool const dst_start_tomorrow = _pacific_time_zone->is_dst(start_tomorrow);
+
+    if (dst_start_tomorrow)
+    {
+        time_code |= static_cast<uint64_t>(1) << 57;
+    }
+    if (dst_start_today)
+    {
+        time_code |= static_cast<uint64_t>(1) << 58;
+    }
 
     bool data_bit = (time_code >> utc.sec) & 1;
     if (data_bit)
