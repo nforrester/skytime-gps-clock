@@ -22,6 +22,7 @@ add_executable(gps_clock
     Buttons.cpp
     Artist.cpp
     Wwvb.cpp
+    Analog.cpp
     gen/iana_time_zones.cpp
 )
 

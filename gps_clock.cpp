@@ -33,6 +33,7 @@
 #include "Buttons.h"
 #include "Artist.h"
 #include "Wwvb.h"
+#include "Analog.h"
 
 std::unique_ptr<Pps> pps;
 
@@ -141,6 +142,18 @@ int main()
     wwvb.set_carrier(false);
     printf("WWVB init complete.\n");
 
+    uint constexpr analog_tick_pin = 28;
+    uint constexpr sense0_pin = 12;
+    uint constexpr sense3_pin = 13;
+    uint constexpr sense6_pin = 14;
+    uint constexpr sense9_pin = 15;
+    bi_decl(bi_1pin_with_name(analog_tick_pin, "ANALOG TICK"));
+    bi_decl(bi_1pin_with_name(sense0_pin, "ANALOG SENSE 0"));
+    bi_decl(bi_1pin_with_name(sense3_pin, "ANALOG SENSE 3"));
+    bi_decl(bi_1pin_with_name(sense6_pin, "ANALOG SENSE 6"));
+    bi_decl(bi_1pin_with_name(sense9_pin, "ANALOG SENSE 9"));
+    Analog analog(*pps, analog_tick_pin, sense0_pin, sense3_pin, sense6_pin, sense9_pin);
+
     led.on();
 
     printf("Launching PPS monitoring thread.\n");
@@ -158,6 +171,7 @@ int main()
         five_simd_ht16k33_busses.dispatch();
         display.dispatch();
         buttons.dispatch();
+        analog.dispatch(prev_completed_seconds);
         pps->dispatch_main_thread();
 
         uint32_t completed_seconds = pps->get_completed_seconds();
@@ -168,6 +182,7 @@ int main()
             next_button_poll_us = 10000;
             gps.pps_lock_state(pps->locked());
             gps.pps_pulsed();
+            analog.pps_pulsed();
 
             if (pps->locked())
             {
@@ -201,6 +216,7 @@ int main()
                    gps.tops_of_seconds().error_count(),
                    buttons.error_count(),
                    artist.error_count());
+            analog.show_sensors();
         }
 
         usec_t button_poll_time_us = pps->get_time_us_of(completed_seconds, next_button_poll_us);
