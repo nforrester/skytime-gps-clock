@@ -152,3 +152,17 @@ usec_t Pps::get_time_us_of(uint32_t completed_seconds, uint32_t additional_micro
 
     return top_of_desired_second_chip + (additional_microseconds * chip_time_per_gps_time);
 }
+
+void Pps::get_time(uint32_t & completed_seconds, uint32_t & additional_microseconds) const
+{
+    completed_seconds = _completed_seconds;
+
+    double chip_time_per_gps_time =
+        _bicycles_per_gps_second_average.get_current_average<double>() /
+        static_cast<double>(bicycles_per_chip_second);
+
+    usec_t chip_time = time_us_64();
+    usec_t top_of_last_second_chip = _prev_top_of_second_time_us;
+    
+    additional_microseconds = (chip_time - top_of_last_second_chip) / chip_time_per_gps_time;
+}

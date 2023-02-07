@@ -217,6 +217,11 @@ int main()
                    buttons.error_count(),
                    artist.error_count());
             analog.show_sensors();
+            analog.print_time();
+
+            uint32_t a, b;
+            pps->get_time(a, b);
+            printf("Time: %lu %lu\n", a, b);
         }
 
         usec_t button_poll_time_us = pps->get_time_us_of(completed_seconds, next_button_poll_us);

@@ -1,6 +1,7 @@
 #include "Analog.h"
 
 #include <cstdio>
+#include <algorithm>
 
 #include "pico/stdlib.h"
 
@@ -12,10 +13,12 @@ Analog::Analog(Pps const & pps,
                uint const sense9_pin):
     _pps(pps),
     _tick(analog_tick_pin),
-    _sense0(sense0_pin),
-    _sense3(sense3_pin),
-    _sense6(sense6_pin),
-    _sense9(sense9_pin)
+    _sensors({
+        { sense0_pin },
+        { sense3_pin },
+        { sense6_pin },
+        { sense9_pin }
+    })
 {
 }
 
@@ -37,15 +40,132 @@ void Analog::dispatch(uint32_t const completed_seconds)
     if (threshold_time_us <= time_us_64())
     {
         _tick.toggle();
+        ++_ticks_performed;
         _next_tick_us += 1000000/16 / _tick_rate;
         if (_next_tick_us >= 1000000)
         {
             _next_tick_us += 10000000;
+        }
+
+        _hour_hand.tick();
+        _min_hand.tick();
+        _sec_hand.tick();
+
+        for (uint8_t quadrant = 0; quadrant < 4; ++quadrant)
+        {
+            _sensors[quadrant].tick();
+
+            int32_t pass_duration = _sensors[quadrant].complete_pass_duration();
+            if (pass_duration)
+            {
+                printf("Detected hand for %ld ticks.\n", pass_duration);
+                if (pass_duration < 3)
+                {
+                    printf("Likely spurious\n");
+                }
+                else if (pass_duration < 3*16)
+                {
+                    printf("Second hand\n");
+                    _sec_hand.new_sensor_reading(quadrant, pass_duration);
+                }
+                else if (20*16 < pass_duration && pass_duration < 3*60*16)
+                {
+                    printf("Minute hand\n");
+                    _min_hand.new_sensor_reading(quadrant, pass_duration);
+                }
+                else if (10*60*16 < pass_duration && pass_duration < 40*60*16)
+                {
+                    printf("Hour hand\n");
+                    _hour_hand.new_sensor_reading(quadrant, pass_duration);
+                }
+                else
+                {
+                    printf("Likely spurious\n");
+                }
+            }
         }
     }
 }
 
 void Analog::show_sensors()
 {
-    printf("Sensors: %d %d %d %d\n", _sense0.get(), _sense3.get(), _sense6.get(), _sense9.get());
+    printf("Sensors: %d %d %d %d\n", _sensors[0].hand_present(), _sensors[1].hand_present(), _sensors[2].hand_present(), _sensors[3].hand_present());
+}
+
+void Analog::Sensor::tick()
+{
+    bool new_state = !_sensor.get();
+    if (new_state != _state)
+    {
+        if (!new_state)
+        {
+            _complete_pass_duration = _ticks_in_state;
+        }
+
+        _state = new_state;
+        _ticks_in_state = 0;
+    }
+    else
+    {
+        ++_ticks_in_state;
+    }
+}
+
+int32_t Analog::Sensor::complete_pass_duration()
+{
+    int32_t response = _complete_pass_duration;
+    _complete_pass_duration = 0;
+    return response;
+}
+
+void Analog::HandModel::new_sensor_reading(uint8_t quadrant, int32_t pass_duration)
+{
+    int32_t new_position = ticks_per_revolution/4*quadrant + pass_duration/2;
+
+    if (locked)
+    {
+        int32_t error = new_position - ticks_since_top;
+        if (std::abs(error) < ticks_per_revolution / 100)
+        {
+            int32_t proposed_correction = error * 0.03;
+            if (proposed_correction == 0)
+            {
+                proposed_correction = std::max(static_cast<int32_t>(-1), std::min(static_cast<int32_t>(1), error));
+            }
+            ticks_since_top += proposed_correction;
+            measurements_contesting_lock = 0;
+        }
+        else
+        {
+            ++measurements_contesting_lock;
+            if (measurements_contesting_lock >= lock_break_threshold)
+            {
+                locked = false;
+            }
+        }
+    }
+
+    if (!locked)
+    {
+        ticks_since_top = new_position;
+        measurements_contesting_lock = 0;
+        locked = true;
+    }
+}
+
+uint8_t Analog::HandModel::displayed_time_units() const
+{
+    if (!locked)
+    {
+        return 99;
+    }
+    return static_cast<int32_t>(units_per_revolution) * ticks_since_top / ticks_per_revolution;
+}
+
+void Analog::print_time() const
+{
+    printf("Analog time: %02d:%02d:%02d\n",
+           _hour_hand.displayed_time_units(),
+           _min_hand.displayed_time_units(),
+           _sec_hand.displayed_time_units());
 }
