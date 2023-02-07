@@ -51,6 +51,7 @@ private:
         void tick() { ticks_since_top = (ticks_since_top + 1) % ticks_per_revolution; }
         void new_sensor_reading(uint8_t quadrant, int32_t pass_duration);
         uint8_t displayed_time_units(int32_t child_hand_persexage) const;
+        int32_t ticks_remainder() const;
 
         bool locked;
         uint16_t measurements_contesting_lock;
@@ -93,5 +94,5 @@ private:
 
     std::shared_ptr<TimeRepresentation> _pacific_time_zone;
 
-    int32_t _error_vs_actual_time = 0;
+    int32_t _error_vs_actual_time_ms = 0;
 };

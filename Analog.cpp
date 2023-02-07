@@ -40,7 +40,7 @@ void Analog::pps_pulsed(TopOfSecond const & top)
         _next_tick_us = _next_tick_us % 1000000;
     }
 
-    _error_vs_actual_time = 0;
+    _error_vs_actual_time_ms = 0;
     if (_hand_pose_locked())
     {
         if (_pacific_time_zone)
@@ -61,12 +61,15 @@ void Analog::pps_pulsed(TopOfSecond const & top)
                     hand.min = _min_hand.displayed_time_units(hand.sec);
                     hand.hour = _hour_hand.displayed_time_units(hand.min);
 
-                    _error_vs_actual_time = desired.subtract_and_return_non_leap_seconds(hand);
-                    _error_vs_actual_time = mod(_error_vs_actual_time, secs_per_day/2);
-                    if (_error_vs_actual_time > secs_per_day/4)
+                    int32_t error_vs_actual_time_s =
+                        desired.subtract_and_return_non_leap_seconds(hand);
+                    error_vs_actual_time_s = mod(error_vs_actual_time_s, secs_per_day/2);
+                    if (error_vs_actual_time_s > secs_per_day/4)
                     {
-                        _error_vs_actual_time -= secs_per_day/2;
+                        error_vs_actual_time_s -= secs_per_day/2;
                     }
+                    _error_vs_actual_time_ms = error_vs_actual_time_s * 1000;
+                    _error_vs_actual_time_ms += _sec_hand.ticks_remainder() * 1000 / 16;
                 }
             }
         }
@@ -193,6 +196,12 @@ void Analog::HandModel::new_sensor_reading(uint8_t quadrant, int32_t pass_durati
     }
 }
 
+int32_t Analog::HandModel::ticks_remainder() const
+{
+        int32_t my_integral_quantity = static_cast<int32_t>(units_per_revolution) * ticks_since_top / ticks_per_revolution;
+        return ticks_since_top - my_integral_quantity * ticks_per_revolution / units_per_revolution;
+}
+
 uint8_t Analog::HandModel::displayed_time_units(int32_t child_hand_persexage) const
 {
     if (!locked)
@@ -202,8 +211,7 @@ uint8_t Analog::HandModel::displayed_time_units(int32_t child_hand_persexage) co
     int32_t reported_ticks_since_top = ticks_since_top;
     if (child_hand_persexage >= 0)
     {
-        int32_t my_integral_quantity = static_cast<int32_t>(units_per_revolution) * ticks_since_top / ticks_per_revolution;
-        int32_t my_ticks_remainder = ticks_since_top - my_integral_quantity * ticks_per_revolution / units_per_revolution;
+        int32_t my_ticks_remainder = ticks_remainder();
         int32_t ticks_per_unit = ticks_per_revolution / units_per_revolution;
         int32_t my_persexage = my_ticks_remainder * 60 / ticks_per_unit;
 
@@ -233,7 +241,7 @@ bool Analog::_hand_pose_locked() const
 
 void Analog::_manage_tick_rate()
 {
-    float desired_tick_rate = _error_vs_actual_time / 20.0 + 1.0;
+    float desired_tick_rate = _error_vs_actual_time_ms / 1000.0 / 20.0 + 1.0;
 
     if (!_hand_pose_locked())
     {
