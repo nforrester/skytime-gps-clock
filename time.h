@@ -43,6 +43,8 @@ struct Ymdhms
 
     void add_seconds(int32_t dt_seconds);
 
+    int64_t subtract_and_return_non_leap_seconds(Ymdhms const & other) const;
+
     uint16_t day_of_year() const;
     bool is_leap_year() const;
 

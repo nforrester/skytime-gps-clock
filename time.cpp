@@ -28,6 +28,16 @@ void Ymdhms::add_seconds(int32_t dt_seconds)
     _from_dsecs(dsecs);
 }
 
+int64_t Ymdhms::subtract_and_return_non_leap_seconds(Ymdhms const & other) const
+{
+    int64_t my_gdays = _to_gdays();
+    int32_t my_dsecs = _to_dsecs();
+    int64_t other_gdays = other._to_gdays();
+    int32_t other_dsecs = other._to_dsecs();
+
+    return (my_gdays - other_gdays) * secs_per_day + my_dsecs - other_dsecs;
+}
+
 int32_t Ymdhms::_to_dsecs() const
 {
     return hour*secs_per_hour + min*secs_per_min + sec;

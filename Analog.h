@@ -1,8 +1,10 @@
 #include "Pps.h"
 #include "Gpio.h"
 #include "time.h"
+#include "iana_time_zones.h"
 
 #include <array>
+#include <memory>
 
 class Analog
 {
@@ -13,7 +15,7 @@ public:
            uint const sense3_pin,
            uint const sense6_pin,
            uint const sense9_pin);
-    void pps_pulsed(TopOfSecond const & tos);
+    void pps_pulsed(TopOfSecond const & top);
     void dispatch(uint32_t const completed_seconds);
     void show_sensors();
 
@@ -24,6 +26,7 @@ private:
     GpioOut _tick;
     uint32_t _next_tick_us = 0;
     float _tick_rate = 1.0;
+    bool _leap_second_halt = false;
     uint64_t _ticks_performed = 0;
 
     class Sensor
@@ -87,4 +90,8 @@ private:
     bool _hand_pose_locked() const;
 
     void _manage_tick_rate();
+
+    std::shared_ptr<TimeRepresentation> _pacific_time_zone;
+
+    int32_t _error_vs_actual_time = 0;
 };

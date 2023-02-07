@@ -20,9 +20,16 @@ Analog::Analog(Pps const & pps,
         { sense9_pin }
     })
 {
+    for (auto const & zone : get_iana_timezones())
+    {
+        if (std::get<std::string>(zone) == "America/Los_Angeles")
+        {
+            _pacific_time_zone = std::get<decltype(_pacific_time_zone)>(zone);
+        }
+    }
 }
 
-void Analog::pps_pulsed(TopOfSecond const & /*tos*/) // TODO
+void Analog::pps_pulsed(TopOfSecond const & top)
 {
     if (_next_tick_us < 1000000)
     {
@@ -32,12 +39,44 @@ void Analog::pps_pulsed(TopOfSecond const & /*tos*/) // TODO
     {
         _next_tick_us = _next_tick_us % 1000000;
     }
+
+    _error_vs_actual_time = 0;
+    if (_hand_pose_locked())
+    {
+        if (_pacific_time_zone)
+        {
+            Ymdhms desired;
+            desired.hour = desired.hour % 12;
+            if (_pacific_time_zone->make_ymdhms(top, desired))
+            {
+                if (desired.sec == 60)
+                {
+                    _leap_second_halt = true;
+                }
+                else
+                {
+                    _leap_second_halt = false;
+                    Ymdhms hand = desired;
+                    hand.sec = _sec_hand.displayed_time_units(-1);
+                    hand.min = _min_hand.displayed_time_units(hand.sec);
+                    hand.hour = _hour_hand.displayed_time_units(hand.min);
+
+                    _error_vs_actual_time = desired.subtract_and_return_non_leap_seconds(hand);
+                    _error_vs_actual_time = mod(_error_vs_actual_time, secs_per_day/2);
+                    if (_error_vs_actual_time > secs_per_day/4)
+                    {
+                        _error_vs_actual_time -= secs_per_day/2;
+                    }
+                }
+            }
+        }
+    }
 }
 
 void Analog::dispatch(uint32_t const completed_seconds)
 {
     usec_t threshold_time_us = _pps.get_time_us_of(completed_seconds, _next_tick_us);
-    if (threshold_time_us <= time_us_64())
+    if (threshold_time_us <= time_us_64() && !_leap_second_halt)
     {
         _tick.toggle();
         ++_ticks_performed;
@@ -184,6 +223,7 @@ void Analog::print_time() const
     int8_t min = _min_hand.displayed_time_units(sec);
     int8_t hour = _hour_hand.displayed_time_units(min);
     printf("Analog time: %02d:%02d:%02d\n", hour, min, sec);
+    printf("Ticking at %f\n", _tick_rate);
 }
 
 bool Analog::_hand_pose_locked() const
@@ -193,11 +233,17 @@ bool Analog::_hand_pose_locked() const
 
 void Analog::_manage_tick_rate()
 {
-    float desired_tick_rate = 1.0;
+    float desired_tick_rate = _error_vs_actual_time / 20.0 + 1.0;
+
     if (!_hand_pose_locked())
     {
-        desired_tick_rate = 1.2;
+        desired_tick_rate = 1000.0;
     }
+
+    float constexpr max_tick_rate_delta = 0.2;
+    desired_tick_rate = std::max(1 - max_tick_rate_delta, desired_tick_rate);
+    desired_tick_rate = std::min(1 + max_tick_rate_delta, desired_tick_rate);
+
     float tick_rate_error = desired_tick_rate - _tick_rate;
     float constexpr max_correction = 0.1 / (15*16);
     float tick_rate_correction =
