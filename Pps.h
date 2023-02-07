@@ -15,6 +15,7 @@ class Pps
 public:
     Pps(PIO pio, uint const pin);
 
+    void pio_init();
     void dispatch_fast_thread();
     void dispatch_main_thread();
 
@@ -29,6 +30,7 @@ private:
     static constexpr uint32_t bicycles_per_nominal_pulse = bicycles_per_chip_second/10;
 
     // Fast thread
+    uint _pin;
     PIO _pio;
     uint _sm;
     uint32_t _bicycles_in_last_second = 0;

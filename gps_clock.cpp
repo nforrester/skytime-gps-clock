@@ -38,6 +38,7 @@ std::unique_ptr<Pps> pps;
 
 void core1_main()
 {
+    pps->pio_init();
     while (true)
     {
         pps->dispatch_fast_thread();

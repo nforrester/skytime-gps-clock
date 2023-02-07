@@ -10,12 +10,17 @@
 #include "util.h"
 
 Pps::Pps(PIO pio, uint const pin):
+    _pin(pin),
     _pio(pio),
     _bicycles_per_gps_second_average(bicycles_per_chip_second)
 {
+}
+
+void Pps::pio_init()
+{
     uint offset = pio_add_program(_pio, &pps_program);
     _sm = pio_claim_unused_sm(_pio, true);
-    pps_program_init(_pio, _sm, offset, pin);
+    pps_program_init(_pio, _sm, offset, _pin);
 }
 
 void Pps::dispatch_fast_thread()
