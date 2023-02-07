@@ -182,7 +182,7 @@ int main()
             next_button_poll_us = 10000;
             gps.pps_lock_state(pps->locked());
             gps.pps_pulsed();
-            analog.pps_pulsed();
+            analog.pps_pulsed(gps.tops_of_seconds().prev());
 
             if (pps->locked())
             {

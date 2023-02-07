@@ -22,7 +22,7 @@ Analog::Analog(Pps const & pps,
 {
 }
 
-void Analog::pps_pulsed()
+void Analog::pps_pulsed(TopOfSecond const & /*tos*/) // TODO
 {
     if (_next_tick_us < 1000000)
     {
@@ -41,6 +41,7 @@ void Analog::dispatch(uint32_t const completed_seconds)
     {
         _tick.toggle();
         ++_ticks_performed;
+        _manage_tick_rate();
         _next_tick_us += 1000000/16 / _tick_rate;
         if (_next_tick_us >= 1000000)
         {
@@ -153,19 +154,61 @@ void Analog::HandModel::new_sensor_reading(uint8_t quadrant, int32_t pass_durati
     }
 }
 
-uint8_t Analog::HandModel::displayed_time_units() const
+uint8_t Analog::HandModel::displayed_time_units(int32_t child_hand_persexage) const
 {
     if (!locked)
     {
         return 99;
     }
-    return static_cast<int32_t>(units_per_revolution) * ticks_since_top / ticks_per_revolution;
+    int32_t reported_ticks_since_top = ticks_since_top;
+    if (child_hand_persexage >= 0)
+    {
+        int32_t my_integral_quantity = static_cast<int32_t>(units_per_revolution) * ticks_since_top / ticks_per_revolution;
+        int32_t my_ticks_remainder = ticks_since_top - my_integral_quantity * ticks_per_revolution / units_per_revolution;
+        int32_t ticks_per_unit = ticks_per_revolution / units_per_revolution;
+        int32_t my_persexage = my_ticks_remainder * 60 / ticks_per_unit;
+
+        int32_t persexage_error = mod(child_hand_persexage - my_persexage, static_cast<int32_t>(60));
+        if (persexage_error >= 30)
+        {
+            persexage_error -= 60;
+        }
+        reported_ticks_since_top = ticks_since_top + persexage_error * ticks_per_unit / 60;
+    }
+    return static_cast<int32_t>(units_per_revolution) * reported_ticks_since_top / ticks_per_revolution;
 }
 
 void Analog::print_time() const
 {
-    printf("Analog time: %02d:%02d:%02d\n",
-           _hour_hand.displayed_time_units(),
-           _min_hand.displayed_time_units(),
-           _sec_hand.displayed_time_units());
+    int8_t sec = _sec_hand.displayed_time_units(-1);
+    int8_t min = _min_hand.displayed_time_units(sec);
+    int8_t hour = _hour_hand.displayed_time_units(min);
+    printf("Analog time: %02d:%02d:%02d\n", hour, min, sec);
+}
+
+bool Analog::_hand_pose_locked() const
+{
+    return _hour_hand.locked && _min_hand.locked && _sec_hand.locked;
+}
+
+void Analog::_manage_tick_rate()
+{
+    float desired_tick_rate = 1.0;
+    if (!_hand_pose_locked())
+    {
+        desired_tick_rate = 1.2;
+    }
+    float tick_rate_error = desired_tick_rate - _tick_rate;
+    float constexpr max_correction = 0.1 / (15*16);
+    float tick_rate_correction =
+        std::max(-max_correction,
+                 std::min(max_correction, tick_rate_error));
+    if (std::abs(tick_rate_correction) < max_correction * 0.8)
+    {
+        _tick_rate = desired_tick_rate;
+    }
+    else
+    {
+        _tick_rate += tick_rate_correction;
+    }
 }

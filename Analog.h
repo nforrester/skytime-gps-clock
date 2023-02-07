@@ -1,5 +1,6 @@
 #include "Pps.h"
 #include "Gpio.h"
+#include "time.h"
 
 #include <array>
 
@@ -12,7 +13,7 @@ public:
            uint const sense3_pin,
            uint const sense6_pin,
            uint const sense9_pin);
-    void pps_pulsed();
+    void pps_pulsed(TopOfSecond const & tos);
     void dispatch(uint32_t const completed_seconds);
     void show_sensors();
 
@@ -46,7 +47,7 @@ private:
     {
         void tick() { ticks_since_top = (ticks_since_top + 1) % ticks_per_revolution; }
         void new_sensor_reading(uint8_t quadrant, int32_t pass_duration);
-        uint8_t displayed_time_units() const;
+        uint8_t displayed_time_units(int32_t child_hand_persexage) const;
 
         bool locked;
         uint16_t measurements_contesting_lock;
@@ -82,4 +83,8 @@ private:
         .ticks_since_top = 0,
         .units_per_revolution = 60,
     };
+
+    bool _hand_pose_locked() const;
+
+    void _manage_tick_rate();
 };
