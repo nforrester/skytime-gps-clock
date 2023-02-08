@@ -65,7 +65,7 @@ private:
         .locked = false,
         .measurements_contesting_lock = 0,
         .lock_break_threshold = 3,
-        .ticks_per_revolution = 16*60*60*24,
+        .ticks_per_revolution = 16*60*60*12,
         .ticks_since_top = 0,
         .units_per_revolution = 12,
     };
