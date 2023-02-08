@@ -52,6 +52,7 @@ void Analog::pps_pulsed(TopOfSecond const & top)
                 if (desired.sec == 60)
                 {
                     _leap_second_halt = true;
+                    _tick_rate = 1.0;
                 }
                 else
                 {
@@ -79,7 +80,7 @@ void Analog::pps_pulsed(TopOfSecond const & top)
 void Analog::dispatch(uint32_t const completed_seconds)
 {
     usec_t threshold_time_us = _pps.get_time_us_of(completed_seconds, _next_tick_us);
-    if (threshold_time_us <= time_us_64() && !_leap_second_halt)
+    if (threshold_time_us <= time_us_64() && !_leap_second_halt && !_sync_halt)
     {
         _tick.toggle();
         ++_ticks_performed;
@@ -242,13 +243,29 @@ bool Analog::_hand_pose_locked() const
 void Analog::_manage_tick_rate()
 {
     float desired_tick_rate = _error_vs_actual_time_ms / 1000.0 / 20.0 + 1.0;
+    _sync_halt = false;
+
+    float constexpr max_tick_rate_delta = 0.2;
 
     if (!_hand_pose_locked())
     {
         desired_tick_rate = 1000.0;
     }
+    else if (_error_vs_actual_time_ms < -30000)
+    {
+        _sync_halt = true;
+    }
+    else if (_error_vs_actual_time_ms >= max_tick_rate_delta * ((12*60*60*1000)/(1+max_tick_rate_delta)))
+    {
+        _sync_halt = true;
+    }
 
-    float constexpr max_tick_rate_delta = 0.2;
+    if (_sync_halt)
+    {
+        _tick_rate = 1.0;
+        return;
+    }
+
     desired_tick_rate = std::max(1 - max_tick_rate_delta, desired_tick_rate);
     desired_tick_rate = std::min(1 + max_tick_rate_delta, desired_tick_rate);
 

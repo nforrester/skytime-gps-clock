@@ -27,6 +27,7 @@ private:
     uint32_t _next_tick_us = 0;
     float _tick_rate = 1.0;
     bool _leap_second_halt = false;
+    bool _sync_halt = false;
     uint64_t _ticks_performed = 0;
 
     class Sensor
