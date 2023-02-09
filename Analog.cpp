@@ -233,6 +233,8 @@ void Analog::print_time() const
     int8_t hour = _hour_hand.displayed_time_units(min);
     printf("Analog time: %02d:%02d:%02d\n", hour, min, sec);
     printf("Ticking at %f\n", _tick_rate);
+    printf("Error %f\n", _error_vs_actual_time_ms/1000.0);
+    printf("Halts %d %d\n", _leap_second_halt, _sync_halt);
 }
 
 bool Analog::_hand_pose_locked() const
