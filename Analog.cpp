@@ -275,7 +275,7 @@ void Analog::_manage_tick_rate()
     desired_tick_rate = std::min(1 + max_tick_rate_delta, desired_tick_rate);
 
     float tick_rate_error = desired_tick_rate - _tick_rate;
-    float constexpr max_correction = 0.1 / (15*16);
+    float max_correction = 0.1 / (15*16*_tick_rate);
     float tick_rate_correction =
         std::max(-max_correction,
                  std::min(max_correction, tick_rate_error));
