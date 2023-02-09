@@ -46,9 +46,9 @@ void Analog::pps_pulsed(TopOfSecond const & top)
         if (_pacific_time_zone)
         {
             Ymdhms desired;
-            desired.hour = desired.hour % 12;
             if (_pacific_time_zone->make_ymdhms(top, desired))
             {
+                desired.hour = desired.hour % 12;
                 if (desired.sec == 60)
                 {
                     _leap_second_halt = true;
