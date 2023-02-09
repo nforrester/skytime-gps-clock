@@ -80,51 +80,54 @@ void Analog::pps_pulsed(TopOfSecond const & top)
 void Analog::dispatch(uint32_t const completed_seconds)
 {
     usec_t threshold_time_us = _pps.get_time_us_of(completed_seconds, _next_tick_us);
-    if (threshold_time_us <= time_us_64() && !_leap_second_halt && !_sync_halt)
+    if (threshold_time_us <= time_us_64())
     {
-        _tick.toggle();
-        ++_ticks_performed;
         _manage_tick_rate();
         _next_tick_us += 1000000/16 / _tick_rate;
         if (_next_tick_us >= 1000000)
         {
             _next_tick_us += 10000000;
         }
-
-        _hour_hand.tick();
-        _min_hand.tick();
-        _sec_hand.tick();
-
-        for (uint8_t quadrant = 0; quadrant < 4; ++quadrant)
+        if (!_leap_second_halt && !_sync_halt)
         {
-            _sensors[quadrant].tick();
+            _tick.toggle();
+            ++_ticks_performed;
 
-            int32_t pass_duration = _sensors[quadrant].complete_pass_duration();
-            if (pass_duration)
+            _hour_hand.tick();
+            _min_hand.tick();
+            _sec_hand.tick();
+
+            for (uint8_t quadrant = 0; quadrant < 4; ++quadrant)
             {
-                printf("Detected hand for %ld ticks.\n", pass_duration);
-                if (pass_duration < 3)
+                _sensors[quadrant].tick();
+
+                int32_t pass_duration = _sensors[quadrant].complete_pass_duration();
+                if (pass_duration)
                 {
-                    printf("Likely spurious\n");
-                }
-                else if (pass_duration < 3*16)
-                {
-                    printf("Second hand\n");
-                    _sec_hand.new_sensor_reading(quadrant, pass_duration);
-                }
-                else if (20*16 < pass_duration && pass_duration < 3*60*16)
-                {
-                    printf("Minute hand\n");
-                    _min_hand.new_sensor_reading(quadrant, pass_duration);
-                }
-                else if (10*60*16 < pass_duration && pass_duration < 40*60*16)
-                {
-                    printf("Hour hand\n");
-                    _hour_hand.new_sensor_reading(quadrant, pass_duration);
-                }
-                else
-                {
-                    printf("Likely spurious\n");
+                    printf("Detected hand for %ld ticks.\n", pass_duration);
+                    if (pass_duration < 3)
+                    {
+                        printf("Likely spurious\n");
+                    }
+                    else if (pass_duration < 3*16)
+                    {
+                        printf("Second hand\n");
+                        _sec_hand.new_sensor_reading(quadrant, pass_duration);
+                    }
+                    else if (20*16 < pass_duration && pass_duration < 3*60*16)
+                    {
+                        printf("Minute hand\n");
+                        _min_hand.new_sensor_reading(quadrant, pass_duration);
+                    }
+                    else if (10*60*16 < pass_duration && pass_duration < 40*60*16)
+                    {
+                        printf("Hour hand\n");
+                        _hour_hand.new_sensor_reading(quadrant, pass_duration);
+                    }
+                    else
+                    {
+                        printf("Likely spurious\n");
+                    }
                 }
             }
         }
