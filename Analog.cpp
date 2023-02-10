@@ -70,7 +70,7 @@ void Analog::pps_pulsed(TopOfSecond const & top)
                         error_vs_actual_time_s -= secs_per_day/2;
                     }
                     _error_vs_actual_time_ms = error_vs_actual_time_s * 1000;
-                    _error_vs_actual_time_ms += _sec_hand.ticks_remainder() * 1000 / 16;
+                    _error_vs_actual_time_ms -= _sec_hand.ticks_remainder() * 1000 / 16;
                 }
             }
         }
