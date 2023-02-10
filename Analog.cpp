@@ -231,13 +231,15 @@ uint8_t Analog::HandModel::displayed_time_units(int32_t child_hand_persexage) co
 
 void Analog::print_time() const
 {
+    int32_t sec_rem = _sec_hand.ticks_remainder();
     int8_t sec = _sec_hand.displayed_time_units(-1);
     int8_t min = _min_hand.displayed_time_units(sec);
     int8_t hour = _hour_hand.displayed_time_units(min);
-    printf("Analog time: %02d:%02d:%02d\n", hour, min, sec);
+    printf("Analog time: %02d:%02d:%02d.%03ld\n", hour, min, sec, sec_rem*1000/16);
     printf("Ticking at %f\n", _tick_rate);
     printf("Error %f\n", _error_vs_actual_time_ms/1000.0);
     printf("Halts %d %d\n", _leap_second_halt, _sync_halt);
+    printf("Locks %d %d %d\n", _hour_hand.locked, _min_hand.locked, _sec_hand.locked);
 }
 
 bool Analog::_hand_pose_locked() const
