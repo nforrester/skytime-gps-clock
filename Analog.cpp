@@ -236,6 +236,9 @@ void Analog::print_time() const
     int8_t min = _min_hand.displayed_time_units(sec);
     int8_t hour = _hour_hand.displayed_time_units(min);
     printf("Analog time: %02d:%02d:%02d.%03ld\n", hour, min, sec, sec_rem*1000/16);
+    printf("TST Hour:   %9ld\n", _hour_hand.ticks_since_top);
+    printf("TST Minute: %9ld\n", _min_hand.ticks_since_top);
+    printf("TST Second: %9ld\n", _sec_hand.ticks_since_top);
     printf("Ticking at %f\n", _tick_rate);
     printf("Error %f\n", _error_vs_actual_time_ms/1000.0);
     printf("Halts %d %d\n", _leap_second_halt, _sync_halt);
