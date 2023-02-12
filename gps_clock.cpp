@@ -11,6 +11,13 @@
  *
  * Try using these to detect the hands:
  * https://www.digikey.com/en/products/detail/vishay-semiconductor-opto-division/TCRT5000L/1681168
+ *
+ *
+ *
+ *
+ *
+ * Transistor for WWVB pulldown
+ * https://www.digikey.com/en/products/detail/toshiba-semiconductor-and-storage/SSM3K357R-LF/8611159
  */
 
 #include <cstdio>
