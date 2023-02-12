@@ -149,7 +149,7 @@ int main()
     wwvb.set_carrier(false);
     printf("WWVB init complete.\n");
 
-    uint constexpr analog_tick_pin = 28;
+    uint constexpr analog_tick_pin = 11;
     uint constexpr sense0_pin = 12;
     uint constexpr sense3_pin = 13;
     uint constexpr sense6_pin = 14;
