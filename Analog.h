@@ -1,7 +1,8 @@
 #include "Pps.h"
-#include "Gpio.h"
 #include "time.h"
 #include "iana_time_zones.h"
+
+#include "Gpio.h"
 
 #include <array>
 #include <memory>
@@ -20,6 +21,8 @@ public:
     void show_sensors();
 
     void print_time() const;
+
+    static bool unit_test();
 
 private:
     Pps const & _pps;

@@ -1,9 +1,17 @@
 #pragma once
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wvolatile"
-#include "hardware/pio.h"
-#pragma GCC diagnostic pop
+#ifndef HOST_BUILD
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wvolatile"
+  #include "hardware/pio.h"
+  #pragma GCC diagnostic pop
+#else
+  #include <cstdint>
+  using uint = unsigned int;
+  using PIO = int;
+
+  uint64_t time_us_64();
+#endif
 
 #include "MovingAverage.h"
 

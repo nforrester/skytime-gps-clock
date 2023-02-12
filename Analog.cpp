@@ -3,7 +3,9 @@
 #include <cstdio>
 #include <algorithm>
 
+#ifndef HOST_BUILD
 #include "pico/stdlib.h"
+#endif
 
 Analog::Analog(Pps const & pps,
                uint const analog_tick_pin,
@@ -104,7 +106,7 @@ void Analog::dispatch(uint32_t const completed_seconds)
                 int32_t pass_duration = _sensors[quadrant].complete_pass_duration();
                 if (pass_duration)
                 {
-                    printf("Detected hand for %ld ticks.\n", pass_duration);
+                    printf("Detected hand for %" PRId32 " ticks.\n", pass_duration);
                     if (pass_duration < 3)
                     {
                         printf("Likely spurious\n");
@@ -219,14 +221,17 @@ uint8_t Analog::HandModel::displayed_time_units(int32_t child_hand_persexage) co
         int32_t ticks_per_unit = ticks_per_revolution / units_per_revolution;
         int32_t my_persexage = my_ticks_remainder * 60 / ticks_per_unit;
 
-        int32_t persexage_error = mod(child_hand_persexage - my_persexage, static_cast<int32_t>(60));
+        int32_t persexage_error =
+            mod(child_hand_persexage - my_persexage, static_cast<int32_t>(60));
         if (persexage_error >= 30)
         {
             persexage_error -= 60;
         }
         reported_ticks_since_top = ticks_since_top + persexage_error * ticks_per_unit / 60;
     }
-    return static_cast<int32_t>(units_per_revolution) * reported_ticks_since_top / ticks_per_revolution;
+    return (static_cast<int32_t>(units_per_revolution) *
+            reported_ticks_since_top / ticks_per_revolution) %
+           units_per_revolution;
 }
 
 void Analog::print_time() const
@@ -235,10 +240,10 @@ void Analog::print_time() const
     int8_t sec = _sec_hand.displayed_time_units(-1);
     int8_t min = _min_hand.displayed_time_units(sec);
     int8_t hour = _hour_hand.displayed_time_units(min);
-    printf("Analog time: %02d:%02d:%02d.%03ld\n", hour, min, sec, sec_rem*1000/16);
-    printf("TST Hour:   %9ld\n", _hour_hand.ticks_since_top);
-    printf("TST Minute: %9ld\n", _min_hand.ticks_since_top);
-    printf("TST Second: %9ld\n", _sec_hand.ticks_since_top);
+    printf("Analog time: %02d:%02d:%02d.%03" PRId32 "\n", hour, min, sec, sec_rem*1000/16);
+    printf("TST Hour:   %9" PRId32 "\n", _hour_hand.ticks_since_top);
+    printf("TST Minute: %9" PRId32 "\n", _min_hand.ticks_since_top);
+    printf("TST Second: %9" PRId32 "\n", _sec_hand.ticks_since_top);
     printf("Ticking at %f\n", _tick_rate);
     printf("Error %f\n", _error_vs_actual_time_ms/1000.0);
     printf("Halts %d %d\n", _leap_second_halt, _sync_halt);
@@ -292,4 +297,30 @@ void Analog::_manage_tick_rate()
     {
         _tick_rate += tick_rate_correction;
     }
+}
+
+bool Analog::unit_test()
+{
+#ifdef HOST_BUILD
+    Pps pps(0, 0);
+    Analog analog(pps, 0, 0, 0, 0, 0);
+
+    analog._hour_hand.ticks_since_top = 231107;
+    analog._min_hand.ticks_since_top  =  57178;
+    analog._sec_hand.ticks_since_top  =      1;
+
+    analog._hour_hand.locked = true;
+    analog._min_hand.locked  = true;
+    analog._sec_hand.locked  = true;
+
+    int8_t sec = analog._sec_hand.displayed_time_units(-1);
+    int8_t min = analog._min_hand.displayed_time_units(sec);
+    int8_t hour = analog._hour_hand.displayed_time_units(min);
+
+    test_assert_signed_eq(sec, 0);
+    test_assert_signed_eq(min, 0);
+    test_assert_signed_eq(hour, 4);
+#endif
+
+    return true;
 }

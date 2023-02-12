@@ -3,9 +3,13 @@
 #include <cstdlib>
 #include <algorithm>
 
-#include "pico/time.h"
+#ifndef HOST_BUILD
+  #include "pico/time.h"
 
-#include "pps.pio.h"
+  #include "pps.pio.h"
+#else
+  uint64_t time_us_64() { return 0; }
+#endif
 
 #include "util.h"
 
@@ -18,13 +22,16 @@ Pps::Pps(PIO pio, uint const pin):
 
 void Pps::pio_init()
 {
+#ifndef HOST_BUILD
     uint offset = pio_add_program(_pio, &pps_program);
     _sm = pio_claim_unused_sm(_pio, true);
     pps_program_init(_pio, _sm, offset, _pin);
+#endif
 }
 
 void Pps::dispatch_fast_thread()
 {
+#ifndef HOST_BUILD
     if (!_pulse_complete)
     {
         if (pps_program_pulse_completed(_pio, _sm))
@@ -50,6 +57,7 @@ void Pps::dispatch_fast_thread()
             _completed_seconds_main_thread_b = _completed_seconds;
         }
     }
+#endif
 }
 
 void Pps::dispatch_main_thread()
@@ -121,7 +129,7 @@ void Pps::dispatch_main_thread()
 
         if (_lock_persistence < _lock_persistence_saturation_limit_hi)
         {
-            printf("PPS lock persistence: %ld\n", _lock_persistence);
+            printf("PPS lock persistence: %" PRId32 "\n", _lock_persistence);
         }
 
         _prev_completed_seconds = completed_seconds;
