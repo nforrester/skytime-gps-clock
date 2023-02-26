@@ -229,9 +229,17 @@ uint8_t Analog::HandModel::displayed_time_units(int32_t child_hand_persexage) co
         }
         reported_ticks_since_top = ticks_since_top + persexage_error * ticks_per_unit / 60;
     }
-    return (static_cast<int32_t>(units_per_revolution) *
-            reported_ticks_since_top / ticks_per_revolution) %
-           units_per_revolution;
+
+    int8_t result =
+        nwraps(static_cast<int32_t>(units_per_revolution) * reported_ticks_since_top,
+               ticks_per_revolution) %
+        units_per_revolution;
+    if (result < 0)
+    {
+        result += units_per_revolution;
+    }
+
+    return result;
 }
 
 void Analog::print_time() const
@@ -302,24 +310,47 @@ void Analog::_manage_tick_rate()
 bool Analog::unit_test()
 {
 #ifdef HOST_BUILD
-    Pps pps(0, 0);
-    Analog analog(pps, 0, 0, 0, 0, 0);
+    {
+        Pps pps(0, 0);
+        Analog analog(pps, 0, 0, 0, 0, 0);
 
-    analog._hour_hand.ticks_since_top = 231107;
-    analog._min_hand.ticks_since_top  =  57178;
-    analog._sec_hand.ticks_since_top  =      1;
+        analog._hour_hand.ticks_since_top = 231107;
+        analog._min_hand.ticks_since_top  =  57178;
+        analog._sec_hand.ticks_since_top  =      1;
 
-    analog._hour_hand.locked = true;
-    analog._min_hand.locked  = true;
-    analog._sec_hand.locked  = true;
+        analog._hour_hand.locked = true;
+        analog._min_hand.locked  = true;
+        analog._sec_hand.locked  = true;
 
-    int8_t sec = analog._sec_hand.displayed_time_units(-1);
-    int8_t min = analog._min_hand.displayed_time_units(sec);
-    int8_t hour = analog._hour_hand.displayed_time_units(min);
+        int8_t sec = analog._sec_hand.displayed_time_units(-1);
+        int8_t min = analog._min_hand.displayed_time_units(sec);
+        int8_t hour = analog._hour_hand.displayed_time_units(min);
 
-    test_assert_signed_eq(sec, 0);
-    test_assert_signed_eq(min, 0);
-    test_assert_signed_eq(hour, 4);
+        test_assert_signed_eq(sec, 0);
+        test_assert_signed_eq(min, 0);
+        test_assert_signed_eq(hour, 4);
+    }
+
+    {
+        Pps pps(0, 0);
+        Analog analog(pps, 0, 0, 0, 0, 0);
+
+        analog._hour_hand.ticks_since_top =    11;
+        analog._min_hand.ticks_since_top  = 56521;
+        analog._sec_hand.ticks_since_top  =    96;
+
+        analog._hour_hand.locked = true;
+        analog._min_hand.locked  = true;
+        analog._sec_hand.locked  = true;
+
+        int8_t sec = analog._sec_hand.displayed_time_units(-1);
+        int8_t min = analog._min_hand.displayed_time_units(sec);
+        int8_t hour = analog._hour_hand.displayed_time_units(min);
+
+        test_assert_signed_eq(sec, 6);
+        test_assert_signed_eq(min, 59);
+        test_assert_signed_eq(hour, 11);
+    }
 #endif
 
     return true;
