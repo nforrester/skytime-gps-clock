@@ -3,6 +3,7 @@
  * https://www.digikey.com/en/products/detail/diodes-incorporated/74LVC1G17W5-7/3829445
  *
  * Search Digikey for "Tactile Switches" to find some nice surface mount buttons.
+ * https://www.digikey.com/en/products/detail/c-k/PTS645SM43SMTR92-LFS/1146840
  *
  * Drive analog clock with 3V H-bridge at 8Hz.
  * Can probably do it with op amps.
@@ -18,6 +19,28 @@
  *
  * Transistor for WWVB pulldown
  * https://www.digikey.com/en/products/detail/toshiba-semiconductor-and-storage/SSM3K357R-LF/8611159
+ *
+ *
+ *
+ * Header for Pico
+ * https://www.digikey.com/en/products/detail/molex/0878982026/3264922
+ *
+ * Header for ZOE-M8Q
+ *
+ * Header for Pico
+ * https://www.digikey.com/en/products/detail/molex/0878982026/3264922
+ * https://www.digikey.com/en/products/detail/molex/0878980826/3264915
+ *
+ * Gates:
+ * https://www.digikey.com/short/j2rpb02v
+ * https://www.digikey.com/short/8dnqh54j
+ * https://www.digikey.com/short/1rr77d24
+ *
+ * Power supply:
+ * https://www.digikey.com/short/2n95bmww
+ * https://www.digikey.com/short/920v422n
+ * https://www.digikey.com/en/products/detail/bourns-inc/SRP1265A-470M/4876628
+ * https://www.digikey.com/en/products/detail/cui-devices/PJ-037B/1644546
  */
 
 #include <cstdio>
