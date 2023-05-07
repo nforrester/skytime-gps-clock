@@ -240,10 +240,13 @@ static inline bool five_simd_ht16k33_busses_program_try_get_acks(
     }
 
     uint32_t const ack_batch = pio_sm_get(pio, sm);
-    all_acks_match_expectation = ack_batch == (expect_ack ? 0: 0x1f);
+
+    uint32_t const expected_acks = expect_ack ? 0: 0x1f;
+    all_acks_match_expectation = ack_batch == expected_acks;
+
     if (!all_acks_match_expectation)
     {
-        printf("Actual acks: 0x%lx\n", ack_batch);
+        printf("Actual acks: 0x%lx, Expected acks: 0x%lx\n", ack_batch, expected_acks);
     }
     return true;
 }
