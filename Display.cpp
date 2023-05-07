@@ -280,7 +280,8 @@ void Display::dispatch()
             {
                 for (size_t common = 0; common < chip.n_columns; ++common)
                 {
-                    if (_screen_updates_required[chip.line_idx][chip.left_column+common])
+                    uint8_t column = chip.n_columns - common - 1;
+                    if (_screen_updates_required[chip.line_idx][chip.left_column+column])
                     {
                         needs_update = true;
                         goto done_checking_for_updates;
@@ -304,8 +305,9 @@ void Display::dispatch()
                     Ht16k33 const & chip = slice.chips[bus];
                     for (size_t common = 0; common < chip.n_columns; ++common)
                     {
-                        char the_char = _screen_text[chip.line_idx][chip.left_column+common];
-                        bool the_dot  = _screen_dots[chip.line_idx][chip.left_column+common];
+                        uint8_t column = chip.n_columns - common - 1;
+                        char the_char = _screen_text[chip.line_idx][chip.left_column+column];
+                        bool the_dot  = _screen_dots[chip.line_idx][chip.left_column+column];
 
                         uint16_t image = 0;
                         image |= char_to_image(the_char);
@@ -331,7 +333,8 @@ void Display::dispatch()
                     {
                         for (size_t common = 0; common < chip.n_columns; ++common)
                         {
-                            _screen_updates_required[chip.line_idx][chip.left_column+common] = false;
+                            uint8_t column = chip.n_columns - common - 1;
+                            _screen_updates_required[chip.line_idx][chip.left_column+column] = false;
                         }
                     }
                 }
