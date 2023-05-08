@@ -56,7 +56,7 @@ std::vector<TimeZoneIana::Eon> zdump(std::string const & time_zone_name, int sta
     line_regex_str << month_regex_str.str();
     line_regex_str << " +(\\d+) +(\\d\\d):(\\d\\d):(\\d\\d) (-?\\d+) UT += +" << weekday_regex_str << " +";
     line_regex_str << month_regex_str.str();
-    line_regex_str << " +\\d+ +\\d\\d:\\d\\d:\\d\\d -?\\d+ ([A-Z+0-9]+) +isdst=([01]) +gmtoff=(-?\\d+)$";
+    line_regex_str << " +\\d+ +\\d\\d:\\d\\d:\\d\\d -?\\d+ ([A-Z\\-+0-9]+) +isdst=([01]) +gmtoff=(-?\\d+)$";
     std::regex line_regex(line_regex_str.str(), std::regex_constants::ECMAScript);
 
     std::regex fail_regex("\\((gmtime|localtime) failed\\)", std::regex_constants::ECMAScript);
@@ -181,12 +181,12 @@ std::vector<TimeZoneIana::Eon> zdump(std::string const & time_zone_name, int sta
 
 void assert_string_safe_for_literal(std::string const & s)
 {
-    std::string static const allowed_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ/_";
+    std::string static const allowed_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ/_-+0123456789";
     for (char c : s)
     {
         if (std::string::npos == allowed_chars.find_first_of(c))
         {
-            throw std::runtime_error("Unexpected character");
+            throw std::runtime_error(std::string("Unexpected character for literal: '") + c + "'");
         }
     }
 }
@@ -199,7 +199,7 @@ std::string get_code_name(std::string const & human_name)
     {
         if (std::string::npos == allowed_chars.find_first_of(c))
         {
-            throw std::runtime_error("Unexpected character");
+            throw std::runtime_error(std::string("Unexpected character for code: '") + c + "'");
         }
         if (c == '/')
         {
@@ -314,13 +314,52 @@ void dump_cpp(std::ostream & cpp, std::vector<std::tuple<std::string, std::vecto
 int main()
 {
     std::vector<std::string> zones_to_generate = {
+        "Pacific/Midway",
+        "America/Adak",
+        "Pacific/Honolulu",
+        "Pacific/Marquesas",
+        "America/Anchorage",
+        "Pacific/Gambier",
         "America/Los_Angeles",
         "America/Denver",
+        "America/Phoenix",
         "America/Chicago",
         "America/New_York",
+        "America/Halifax",
+        "Canada/Newfoundland",
+        "Atlantic/Stanley",
+        "Atlantic/South_Georgia",
+        "Atlantic/Azores",
+        "Atlantic/Cape_Verde",
         "Europe/London",
-        "Asia/Kolkata",
+        "Africa/Lagos",
+        "Europe/Paris",
+        "Africa/Johannesburg",
+        "Asia/Jerusalem",
+        "Europe/Istanbul",
+        "Asia/Tehran",
+        "Asia/Dubai",
+        "Asia/Kabul",
+        "Asia/Yekaterinburg",
+        "Asia/Kathmandu",
+        "Asia/Omsk",
+        "Asia/Yangon",
+        "Asia/Novosibirsk",
         "Asia/Taipei",
+        "Australia/Eucla",
+        "Asia/Tokyo",
+        "Australia/Darwin",
+        "Australia/Adelaide",
+        "Australia/Brisbane",
+        "Australia/Sydney",
+        "Australia/Lord_Howe",
+        "Pacific/Guadalcanal",
+        "Pacific/Norfolk",
+        "Asia/Kamchatka",
+        "Pacific/Auckland",
+        "Pacific/Chatham",
+        "Pacific/Fakaofo",
+        "Pacific/Kiritimati",
     };
 
     std::vector<std::tuple<std::string, std::vector<TimeZoneIana::Eon>>> zones;
