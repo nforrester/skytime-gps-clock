@@ -91,10 +91,11 @@ void TimePrinter::print(size_t line, uint8_t tenths)
     bool print_result;
     if (_time_rep->make_ymdhms(_gps.tops_of_seconds().prev(), ymdhms))
     {
+        std::string abbrev = _time_rep->abbrev(_gps.tops_of_seconds().prev().utc_ymdhms);
         print_result = _disp.printf(
             line,
             "%-4s%04d.%02d.%02d %02d.%02d.%02d.%d",
-            _time_rep->abbrev(_gps.tops_of_seconds().prev().utc_ymdhms).c_str(),
+            abbrev.c_str(),
             ymdhms.year,
             ymdhms.month,
             ymdhms.day,
@@ -105,7 +106,8 @@ void TimePrinter::print(size_t line, uint8_t tenths)
     }
     else
     {
-        print_result = _disp.printf(line, "%s Initializing...", _time_rep->abbrev().c_str());
+        std::string abbrev = _time_rep->abbrev();
+        print_result = _disp.printf(line, "%s Initializing...", abbrev.c_str());
     }
     if (!print_result)
     {

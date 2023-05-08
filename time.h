@@ -206,8 +206,8 @@ class TimeRepresentation
 {
 public:
     virtual bool make_ymdhms(TopOfSecond const & top_of_second, Ymdhms & ymdhms) const = 0;
-    virtual std::string const & abbrev() const = 0;
-    virtual std::string const & abbrev(Ymdhms const & utc) const = 0;
+    virtual std::string abbrev() const = 0;
+    virtual std::string abbrev(Ymdhms const & utc) const = 0;
     virtual bool is_dst(Ymdhms const & utc) const = 0;
 };
 
@@ -224,12 +224,12 @@ public:
         return true;
     }
 
-    std::string const & abbrev() const override
+    std::string abbrev() const override
     {
         return _abbrev;
     }
 
-    std::string const & abbrev(Ymdhms const &) const override
+    std::string abbrev(Ymdhms const &) const override
     {
         return _abbrev;
     }
@@ -263,12 +263,12 @@ public:
         return true;
     }
 
-    std::string const & abbrev() const override
+    std::string abbrev() const override
     {
         return _abbrev;
     }
 
-    std::string const & abbrev(Ymdhms const &) const override
+    std::string abbrev(Ymdhms const &) const override
     {
         return _abbrev;
     }
@@ -295,88 +295,30 @@ public:
         int utc_offset;
     };
 
-    TimeZoneIana(std::vector<Eon> const & eons): _eons(eons)
-    {
-        #if __cpp_exceptions
-        if (_eons.size() == 0)
-        {
-            throw std::runtime_error("Need at least one Eon to make a TimeZoneIana");
-        }
-        #endif
-    }
-
     bool make_ymdhms(TopOfSecond const & top_of_second, Ymdhms & ymdhms) const override
     {
         if (!top_of_second.utc_ymdhms_valid)
         {
             return false;
         }
-        Eon const * eon = _find_eon(top_of_second.utc_ymdhms);
-        if (eon == nullptr)
-        {
-            return false;
-        }
+        Eon const eon = _get_eon(top_of_second.utc_ymdhms);
         ymdhms = top_of_second.utc_ymdhms;
-        ymdhms.add_seconds(eon->utc_offset);
+        ymdhms.add_seconds(eon.utc_offset);
         return true;
     }
 
-    std::string const & abbrev() const override
+    std::string abbrev(Ymdhms const & utc) const override
     {
-        return _eons[0].abbreviation;
-    }
-
-    std::string const & abbrev(Ymdhms const & utc) const override
-    {
-        Eon const * eon = _find_eon(utc);
-        if (eon == nullptr)
-        {
-            return abbrev();
-        }
-        return eon->abbreviation;
+        Eon const eon = _get_eon(utc);
+        return eon.abbreviation;
     }
 
     bool is_dst(Ymdhms const & utc) const override
     {
-        Eon const * eon = _find_eon(utc);
-        if (eon == nullptr)
-        {
-            return false;
-        }
-        return eon->is_dst;
+        Eon const eon = _get_eon(utc);
+        return eon.is_dst;
     }
 
 private:
-    std::vector<Eon> const _eons;
-
-    Eon const * _find_eon(Ymdhms const & utc) const
-    {
-        if (_eons.size() == 0)
-        {
-            return nullptr;
-        }
-        if (_eons.front().date > utc)
-        {
-            return nullptr;
-        }
-        if (_eons.back().date <= utc)
-        {
-            return &_eons.back();
-        }
-        size_t idx_leq = 0;
-        size_t idx_gt = _eons.size() - 1;
-        while (idx_gt - idx_leq > 1)
-        {
-            size_t idx_mid = idx_leq + ((idx_gt - idx_leq) / 2);
-            if (_eons[idx_mid].date <= utc)
-            {
-                idx_leq = idx_mid;
-            }
-            else
-            {
-                idx_gt = idx_mid;
-            }
-        }
-        return &_eons[idx_leq];
-    }
+    virtual Eon _get_eon(Ymdhms const & utc) const = 0;
 };

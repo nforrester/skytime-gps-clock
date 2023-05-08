@@ -4,8 +4,10 @@
 #include <iostream>
 #include <string>
 #include <array>
+#include <set>
 #include <regex>
 #include <limits>
+#include <ranges>
 
 #include "time.h"
 
@@ -189,32 +191,66 @@ void assert_string_safe_for_literal(std::string const & s)
     }
 }
 
+std::string get_code_name(std::string const & human_name)
+{
+    std::string static const allowed_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ/_";
+    std::string code_name = "TimeZoneIana_";
+    for (char c : human_name)
+    {
+        if (std::string::npos == allowed_chars.find_first_of(c))
+        {
+            throw std::runtime_error("Unexpected character");
+        }
+        if (c == '/')
+        {
+            code_name += "__SLASH__";
+        }
+        else
+        {
+            code_name += c;
+        }
+    }
+    return code_name;
+}
+
 void dump_cpp(std::ostream & cpp, std::vector<std::tuple<std::string, std::vector<TimeZoneIana::Eon>>> const & zones)
 {
     cpp << "#include \"../iana_time_zones.h\"\n";
     cpp << "\n";
-    cpp << "std::vector<std::tuple<std::string, std::shared_ptr<TimeRepresentation>>> const & get_iana_timezones()\n";
+    cpp << "namespace\n";
     cpp << "{\n";
-    cpp << "    using namespace std;\n";
-    cpp << "    vector<tuple<string, shared_ptr<TimeRepresentation>>> static timezones;\n";
-    cpp << "    if (timezones.size() > 0)\n";
-    cpp << "    {\n";
-    cpp << "        return timezones;\n";
-    cpp << "    }\n";
+    std::set<std::string> code_names;
     for (auto const & zone : zones)
     {
         auto const & name = get<std::string>(zone);
         auto const & eons = get<std::vector<TimeZoneIana::Eon>>(zone);
 
-        assert_string_safe_for_literal(name);
-
-        cpp << "    timezones.push_back(make_tuple(\n";
-        cpp << "        \"" << name << "\",\n";
-        cpp << "        make_shared<TimeZoneIana>(vector<TimeZoneIana::Eon>({\n";
-        for (TimeZoneIana::Eon const & eon : eons)
+        std::string const code_name = get_code_name(name);
+        if (code_names.count(code_name))
         {
+            throw std::runtime_error("Duplicate code name: " + code_name);
+        }
+        code_names.insert(code_name);
+
+        cpp << "    class " << code_name << ": public TimeZoneIana\n";
+        cpp << "    {\n";
+        cpp << "    private:\n";
+        cpp << "        Eon _get_eon(Ymdhms const & utc) const override\n";
+        cpp << "        {\n";
+        for (TimeZoneIana::Eon const & eon : eons | std::views::reverse)
+        {
+            cpp << "            if (utc >= ";
+            cpp << "Ymdhms(" << static_cast<int>(eon.date.year);
+            cpp << ", " << static_cast<int>(eon.date.month);
+            cpp << ", " << static_cast<int>(eon.date.day);
+            cpp << ", " << static_cast<int>(eon.date.hour);
+            cpp << ", " << static_cast<int>(eon.date.min);
+            cpp << ", " << static_cast<int>(eon.date.sec);
+            cpp << "))\n";
+            cpp << "            {\n";
+            cpp << "                return ";
             assert_string_safe_for_literal(eon.abbreviation);
-            cpp << "            { ";
+            cpp << "{";
             cpp << ".date = Ymdhms(" << static_cast<int>(eon.date.year);
             cpp << ", " << static_cast<int>(eon.date.month);
             cpp << ", " << static_cast<int>(eon.date.day);
@@ -224,9 +260,52 @@ void dump_cpp(std::ostream & cpp, std::vector<std::tuple<std::string, std::vecto
             cpp << "), .abbreviation = \"" << eon.abbreviation;
             cpp << "\", .is_dst = " << (eon.is_dst ? "true" : "false");
             cpp << ", .utc_offset = " << eon.utc_offset;
-            cpp << " },\n";
+            cpp << "};\n";
+            cpp << "            }\n";
         }
-        cpp << "        }))));\n";
+        cpp << "            return ";
+        TimeZoneIana::Eon const & eon = eons.at(0);
+        assert_string_safe_for_literal(eon.abbreviation);
+        cpp << "{";
+        cpp << ".date = Ymdhms(" << static_cast<int>(eon.date.year);
+        cpp << ", " << static_cast<int>(eon.date.month);
+        cpp << ", " << static_cast<int>(eon.date.day);
+        cpp << ", " << static_cast<int>(eon.date.hour);
+        cpp << ", " << static_cast<int>(eon.date.min);
+        cpp << ", " << static_cast<int>(eon.date.sec);
+        cpp << "), .abbreviation = \"" << eon.abbreviation;
+        cpp << "\", .is_dst = " << (eon.is_dst ? "true" : "false");
+        cpp << ", .utc_offset = " << eon.utc_offset;
+        cpp << "};\n";
+        cpp << "        }\n";
+        cpp << "        std::string abbrev() const override\n";
+        cpp << "        {\n";
+        cpp << "            return \"" << eon.abbreviation << "\";\n";
+        cpp << "        }\n";
+        cpp << "    };\n";
+    }
+    cpp << "}\n";
+    cpp << "\n";
+    cpp << "std::vector<std::tuple<std::string, std::shared_ptr<TimeRepresentation>>> const & get_iana_timezones()\n";
+    cpp << "{\n";
+    cpp << "    using namespace std;\n";
+    cpp << "    vector<tuple<string, shared_ptr<TimeRepresentation>>> static timezones;\n";
+    cpp << "    if (timezones.size() > 0)\n";
+    cpp << "    {\n";
+    cpp << "        return timezones;\n";
+    cpp << "    }\n";
+    int eon_db_idx = 0;
+    for (auto const & zone : zones)
+    {
+        auto const & name = get<std::string>(zone);
+
+        assert_string_safe_for_literal(name);
+        std::string const code_name = get_code_name(name);
+
+        cpp << "    timezones.push_back(make_tuple(\n";
+        cpp << "        \"" << name << "\",\n";
+        cpp << "        make_shared<" << code_name << ">()));\n";
+        ++eon_db_idx;
     }
     cpp << "    return timezones;\n";
     cpp << "}\n";
@@ -236,11 +315,11 @@ int main()
 {
     std::vector<std::string> zones_to_generate = {
         "America/Los_Angeles",
-        //"America/Denver",
+        "America/Denver",
         "America/Chicago",
-        //"America/New_York",
-        //"Europe/London",
-        //"Asia/Kolkata",
+        "America/New_York",
+        "Europe/London",
+        "Asia/Kolkata",
         "Asia/Taipei",
     };
 
@@ -248,7 +327,7 @@ int main()
 
     for (auto const & name : zones_to_generate)
     {
-        zones.push_back(std::make_tuple(name, zdump(name, 2020, 2040)));
+        zones.push_back(std::make_tuple(name, zdump(name, 2020, 8000)));
     }
 
     dump_cpp(std::cout, zones);
