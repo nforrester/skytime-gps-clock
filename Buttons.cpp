@@ -21,10 +21,10 @@ bool Buttons::get_button(Button & button)
 
 void Buttons::dispatch()
 {
-    bool curr_up = _gpio_up.get();
-    bool curr_dn = _gpio_dn.get();
-    bool curr_lf = _gpio_lf.get();
-    bool curr_rt = _gpio_rt.get();
+    bool curr_up = !_gpio_up.get();
+    bool curr_dn = !_gpio_dn.get();
+    bool curr_lf = !_gpio_lf.get();
+    bool curr_rt = !_gpio_rt.get();
 
     if (!_prev_up && curr_up)
     {

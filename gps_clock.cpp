@@ -266,6 +266,8 @@ int main()
             artist.button_pressed(button);
         }
 
+        display.set_brightness(artist.get_brightness());
+
         if (wwvb_needs_top_of_second)
         {
             wwvb_needs_top_of_second = false;

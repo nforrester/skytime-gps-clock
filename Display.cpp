@@ -40,6 +40,29 @@ Display::Display(FiveSimdHt16k33Busses & busses):
                 }),
         };
 
+    // Set brightness
+    _desired_pulse_width = 0;
+    for (uint8_t & sb : _selected_pulse_width)
+    {
+        sb = 100;
+    }
+    while (true)
+    {
+        bool brightness_unset = false;
+        for (uint8_t & sb : _selected_pulse_width)
+        {
+            if (sb != _desired_pulse_width)
+            {
+                brightness_unset = true;
+            }
+        }
+        if (!brightness_unset)
+        {
+            break;
+        }
+        _make_progress_on_setting_brightness(_desired_pulse_width, true);
+    }
+
     for (auto const & slice : _slices)
     {
         // Enable internal system clock
@@ -49,27 +72,6 @@ Display::Display(FiveSimdHt16k33Busses & busses):
             {
                 ::printf("HT16K33 Failed to enable internal system clock on bus slice %02x.\n", slice.address);
                 ++_error_count;
-            }
-        }
-
-        // Set brightness
-        {
-            // valid values range from 0 to 15 inclusive.
-            // 0 is the minimum brightness that isn't off.
-            uint8_t constexpr pulse_width = 0;
-            if (pulse_width > 0xf)
-            {
-                ++_error_count;
-            }
-            else
-            {
-                uint8_t constexpr command = 0xe0 | pulse_width;
-
-                if (!_busses.blocking_write(slice.address, 1, &command, &command, &command, &command, &command))
-                {
-                    ::printf("HT16K33 Failed to set brightness on bus slice %02x.\n", slice.address);
-                    ++_error_count;
-                }
             }
         }
 
@@ -273,6 +275,20 @@ void Display::dispatch()
 
     if (!_command_in_progress)
     {
+        bool brightness_unset = false;
+        for (uint8_t & sb : _selected_pulse_width)
+        {
+            if (sb != _desired_pulse_width)
+            {
+                brightness_unset = true;
+            }
+        }
+        if (brightness_unset)
+        {
+            _make_progress_on_setting_brightness(_desired_pulse_width, false);
+            return;
+        }
+
         for (auto const & slice : _slices)
         {
             bool needs_update = false;
@@ -486,6 +502,49 @@ void Display::dump_to_console(bool show_dots)
         if (EOF == putc('\n', stdout))
         {
             ++_error_count;
+        }
+    }
+}
+
+void Display::_make_progress_on_setting_brightness(uint8_t const pulse_width, bool blocking)
+{
+    // valid values range from 0 to 15 inclusive.
+    // 0 is the minimum brightness that isn't off.
+
+    if (pulse_width > 0xf)
+    {
+        ++_error_count;
+    }
+    else
+    {
+        for (size_t slice_idx = 0; slice_idx < _slices.size(); ++slice_idx)
+        {
+            if (pulse_width != _selected_pulse_width[slice_idx])
+            {
+                auto const & slice = _slices[slice_idx];
+
+                uint8_t const command = 0xe0 | pulse_width;
+
+                if (blocking)
+                {
+                    if (!_busses.blocking_write(slice.address, 1, &command, &command, &command, &command, &command))
+                    {
+                        ::printf("HT16K33 Failed to set brightness on bus slice %02x.\n", slice.address);
+                        ++_error_count;
+                    }
+                    _selected_pulse_width[slice_idx] = pulse_width;
+                }
+                else
+                {
+                    if (_busses.begin_write(slice.address, 1, &command, &command, &command, &command, &command))
+                    {
+                        _command_in_progress = true;
+                        _selected_pulse_width[slice_idx] = pulse_width;
+                    }
+                }
+
+                return;
+            }
         }
     }
 }

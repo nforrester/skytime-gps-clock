@@ -17,17 +17,17 @@ class Menuverable
 public:
     Menuverable(std::string const & name_): _name(name_) {}
     Menuverable * leaf_to_display(size_t depth);
-    void goto_prev() { _selected = std::max(_selected - 1, 0); }
-    void goto_next() { _selected = std::min(_selected + 1, static_cast<ssize_t>(num_items() - 1)); }
+    virtual void goto_prev() { _selected = std::max(_selected - 1, 0); }
+    virtual void goto_next() { _selected = std::min(_selected + 1, static_cast<ssize_t>(num_items() - 1)); }
     virtual ssize_t button_right() = 0; // Return change in depth (right button might select and go shallower, rather than going deeper).
     std::string const & name() const { return _name; }
-    virtual std::string const & item_name(size_t index) const = 0;
-    size_t selected() const { return _selected; }
+    virtual std::string item_name(ssize_t index) const = 0;
+    ssize_t selected() const { return _selected; }
     virtual size_t num_items() const = 0;
     void set_selection(size_t selection) { _selected = selection; }
+    virtual void show(Display & display) const;
 protected:
     virtual Menuverable * _get_submenu(size_t /* index */) { return nullptr; };
-private:
     std::string _name;
     ssize_t _selected = 0;
 };
@@ -43,7 +43,7 @@ public:
     }
 
     ssize_t button_right() override { if (_contents.size() > 0) { return 1; } else { return 0; } }
-    std::string const & item_name(size_t index) const override { return _contents[index]->name(); }
+    std::string item_name(ssize_t index) const override { return _contents[index]->name(); }
 
     size_t num_items() const override { return _contents.size(); }
 
@@ -65,7 +65,7 @@ public:
     }
 
     ssize_t button_right() override { return 0; }
-    std::string const & item_name(size_t index) const override { return std::get<std::string>(_options[index]); }
+    std::string item_name(ssize_t index) const override { return std::get<std::string>(_options[index]); }
 
     T & get() { return *std::get<std::shared_ptr<T>>(_options[selected()]); }
 
@@ -73,6 +73,31 @@ public:
 
 private:
     std::vector<std::tuple<std::string, std::shared_ptr<T>>> _options;
+};
+
+class IntSelector: public Menuverable
+{
+public:
+    IntSelector(std::string const & name_, ssize_t min_value, ssize_t max_value):
+        Menuverable(name_), _min_value(min_value), _max_value(max_value)
+    {
+        set_selection(min_value);
+    }
+
+    ssize_t button_right() override { return 0; }
+
+    void goto_prev() override { _selected = std::min(_selected + 1, _max_value); }
+    void goto_next() override { _selected = std::max(_selected - 1, _min_value); }
+
+    std::string item_name(ssize_t index) const override { return std::to_string(index); }
+
+    size_t num_items() const override { return _max_value - _min_value + 1; }
+
+    void show(Display & display) const override;
+
+private:
+    ssize_t _min_value;
+    ssize_t _max_value;
 };
 
 class LinePrinter
@@ -112,6 +137,8 @@ public:
 
     uint32_t error_count() const { return _error_count; }
 
+    uint8_t get_brightness() const { return _brightness->selected() - 1; }
+
 private:
     Display & _disp;
     Buttons & _buttons;
@@ -127,6 +154,8 @@ private:
     std::unique_ptr<Menuverable> _menu;
     ssize_t _menu_depth = 0;
     void _show_menu();
+
+    IntSelector * _brightness;
 
     uint32_t _error_count = 0;
 };

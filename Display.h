@@ -38,6 +38,8 @@ public:
 
     void dump_to_console(bool show_dots);
 
+    void set_brightness(uint8_t const pulse_width) { _desired_pulse_width = pulse_width; }
+
 private:
     FiveSimdHt16k33Busses & _busses;
     bool _command_in_progress = false;
@@ -83,7 +85,12 @@ private:
         std::array<Ht16k33, 5> chips;
     };
 
-    std::array<SliceOfBusses, 3> _slices;
+    static size_t constexpr _num_slices = 3;
+    std::array<SliceOfBusses, _num_slices> _slices;
+
+    uint8_t _desired_pulse_width;
+    std::array<uint8_t, _num_slices> _selected_pulse_width;
+    void _make_progress_on_setting_brightness(uint8_t const pulse_width, bool blocking);
 
     uint32_t _error_count = 0;
 };

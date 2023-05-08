@@ -54,9 +54,13 @@ Artist::Artist(Display & display,
         contents->add_item(move(radiobutton));
     }
 
+    auto brightness = make_unique<IntSelector>("Brightness", 1, 16);
+    brightness->set_selection(1);
+    _brightness = brightness.get();
+
     auto digital_display = make_unique<Menu>("Digital Display");
     digital_display->add_item(move(contents));
-    digital_display->add_item(make_unique<Menu>("Brightness"));
+    digital_display->add_item(move(brightness));
 
     auto menu = make_unique<Menu>("Menu");
     menu->add_item(move(digital_display));
@@ -206,36 +210,50 @@ void Artist::_show_menu()
 
     _disp.printf(0, "%s", title_line.c_str());
 
-    ssize_t selected = menu->selected();
-    ssize_t num_items = menu->num_items();
+    menu->show(_disp);
+}
+
+void Menuverable::show(Display & display) const
+{
+    ssize_t num_items_ = num_items();
     ssize_t first_item_to_show;
     ssize_t constexpr scrollable_height = Display::num_lines - 1;
-    if (selected == 0)
+    if (selected() == 0)
     {
         first_item_to_show = 0;
     }
-    else if (selected == num_items - 1)
+    else if (selected() == num_items_ - 1)
     {
-        first_item_to_show = std::max(0, num_items - scrollable_height);
+        first_item_to_show = std::max(0, num_items_ - scrollable_height);
     }
-    else if (selected == num_items - 2)
+    else if (selected() == num_items_ - 2)
     {
-        first_item_to_show = std::max(0, num_items - scrollable_height);
+        first_item_to_show = std::max(0, num_items_ - scrollable_height);
     }
     else
     {
-        first_item_to_show = selected - 1;
+        first_item_to_show = selected() - 1;
     }
 
     for (ssize_t item = first_item_to_show; item < first_item_to_show + scrollable_height; ++item)
     {
-        if (item >= static_cast<ssize_t>(menu->num_items()))
+        if (item >= static_cast<ssize_t>(num_items()))
         {
-            _disp.printf(1+item-first_item_to_show, "                    ");
+            display.printf(1+item-first_item_to_show, "                    ");
         }
         else
         {
-            _disp.printf(1+item-first_item_to_show, "%s%s", (item == selected ? ">" : " "), menu->item_name(item).c_str());
+            std::string your_name = item_name(item);
+            display.printf(1+item-first_item_to_show, "%s%s", (item == selected() ? ">" : " "), your_name.c_str());
         }
     }
+}
+
+void IntSelector::show(Display & display) const
+{
+    std::string your_name = item_name(selected());
+    display.printf(1, "%s", your_name.c_str());
+    display.printf(2, " ");
+    display.printf(3, " ");
+    display.printf(4, " ");
 }
