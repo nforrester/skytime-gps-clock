@@ -151,7 +151,15 @@ int main()
         printf("Display init FAILED. Error count: %ld.\n", display.error_count());
     }
 
-    Buttons buttons(five_simd_ht16k33_busses);
+    uint constexpr button_up_pin = 6;
+    uint constexpr button_rt_pin = 7;
+    uint constexpr button_dn_pin = 8;
+    uint constexpr button_lf_pin = 9;
+    bi_decl(bi_1pin_with_name(button_up_pin, "BTN UP"));
+    bi_decl(bi_1pin_with_name(button_dn_pin, "BTN DN"));
+    bi_decl(bi_1pin_with_name(button_lf_pin, "BTN LF"));
+    bi_decl(bi_1pin_with_name(button_rt_pin, "BTN RT"));
+    Buttons buttons(button_up_pin, button_dn_pin, button_lf_pin, button_rt_pin);
     if (buttons.error_count() == 0)
     {
         printf("Buttons init complete.\n");
@@ -192,7 +200,6 @@ int main()
     printf("Begin main loop.\n");
     uint32_t prev_completed_seconds = 0;
     uint32_t next_display_update_us = 0;
-    uint32_t next_button_poll_us = 10000;
     bool wwvb_needs_top_of_second = false;
     uint32_t wwvb_raise_power_us = 100000000; // Never
     while (true)
@@ -209,7 +216,6 @@ int main()
         {
             prev_completed_seconds = completed_seconds;
             next_display_update_us = 0;
-            next_button_poll_us = 10000;
             gps.pps_lock_state(pps->locked());
             gps.pps_pulsed();
             analog.pps_pulsed(gps.tops_of_seconds().prev());
@@ -252,14 +258,6 @@ int main()
             uint32_t a, b;
             pps->get_time(a, b);
             printf("Time: %lu %lu\n", a, b);
-        }
-
-        usec_t button_poll_time_us = pps->get_time_us_of(completed_seconds, next_button_poll_us);
-        if (button_poll_time_us <= time_us_64())
-        {
-            // HT16K33 frame time is 9.504ms. Polling every 20ms guarantees that a full frame will have elapsed in between.
-            next_button_poll_us += 20000;
-            buttons.begin_poll();
         }
 
         Button button;

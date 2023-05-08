@@ -1,33 +1,11 @@
 #include "Buttons.h"
 
-Buttons::Buttons(FiveSimdHt16k33Busses & busses):
-    _busses(busses)
+Buttons::Buttons(uint const pin_up, uint const pin_dn, uint const pin_lf, uint const pin_rt):
+    _gpio_up(pin_up),
+    _gpio_dn(pin_dn),
+    _gpio_lf(pin_lf),
+    _gpio_rt(pin_rt)
 {
-    for (uint8_t & byte : _button_data)
-    {
-        byte = 0;
-    }
-
-    for (uint8_t & byte : _last_button_data)
-    {
-        byte = 0;
-    }
-
-    uint8_t constexpr command = 0xa0;
-    if (!_busses.blocking_write(chip_addr, 1, &command, &command, &command, &command, &command))
-    {
-        ::printf("HT16K33 Failed to set ROW/INT register to ROW mode.\n");
-        ++_error_count;
-    }
-}
-
-void Buttons::begin_poll()
-{
-    if (_poll_requested || _poll_in_progress)
-    {
-        ++_error_count;
-    }
-    _poll_requested = true;
 }
 
 bool Buttons::get_button(Button & button)
@@ -43,87 +21,61 @@ bool Buttons::get_button(Button & button)
 
 void Buttons::dispatch()
 {
-    constexpr uint8_t button_base_reg = 0x40;
+    bool curr_up = _gpio_up.get();
+    bool curr_dn = _gpio_dn.get();
+    bool curr_lf = _gpio_lf.get();
+    bool curr_rt = _gpio_rt.get();
 
-    if (_poll_in_progress)
+    if (!_prev_up && curr_up)
     {
-        bool success;
-        if (!_busses.try_end_read(success,
-                                  _button_data.data(),
-                                  nullptr,
-                                  nullptr,
-                                  nullptr,
-                                  nullptr))
+        if (!_button_events.full())
         {
-            return;
-        }
-        if (!success)
-        {
-            ++_error_count;
+            _button_events.push(Button::Up);
         }
         else
         {
-            for (size_t i = 0; i < num_button_bytes; ++i)
-            {
-                for (size_t j = 0; j < 8; ++j)
-                {
-                    bool button_old = (_last_button_data[i] >> j) & 1;
-                    bool button_new = (     _button_data[i] >> j) & 1;
-                    if ((!button_old) && button_new)
-                    {
-                        bool space_avail = !_button_events.full();
-                        if (space_avail && i == 1 && j == 4)
-                        {
-                            _button_events.push(Button::Left);
-                        }
-                        else if (space_avail && i == 1 && j == 3)
-                        {
-                            _button_events.push(Button::Down);
-                        }
-                        else if (space_avail && i == 1 && j == 2)
-                        {
-                            _button_events.push(Button::Up);
-                        }
-                        else if (space_avail && i == 3 && j == 4)
-                        {
-                            _button_events.push(Button::Right);
-                        }
-                        else if (space_avail && i == 3 && j == 3)
-                        {
-                            _button_events.push(Button::Plus);
-                        }
-                        else if (space_avail && i == 3 && j == 2)
-                        {
-                            _button_events.push(Button::Minus);
-                        }
-                        else
-                        {
-                            ++_error_count;
-                        }
-                    }
-                }
-                _last_button_data[i] = _button_data[i];
-            }
+            ++_error_count;
         }
-        _poll_in_progress = false;
     }
 
-    if (!_poll_in_progress)
+    if (!_prev_dn && curr_dn)
     {
-        if (_poll_requested)
+        if (!_button_events.full())
         {
-            if (!_busses.begin_read(chip_addr,
-                                    num_button_bytes,
-                                    button_base_reg,
-                                    button_base_reg,
-                                    button_base_reg,
-                                    button_base_reg,
-                                    button_base_reg))
-            {
-                return;
-            }
-            _poll_in_progress = true;
-            _poll_requested = false;
+            _button_events.push(Button::Down);
+        }
+        else
+        {
+            ++_error_count;
         }
     }
+
+    if (!_prev_lf && curr_lf)
+    {
+        if (!_button_events.full())
+        {
+            _button_events.push(Button::Left);
+        }
+        else
+        {
+            ++_error_count;
+        }
+    }
+
+    if (!_prev_rt && curr_rt)
+    {
+        if (!_button_events.full())
+        {
+            _button_events.push(Button::Right);
+        }
+        else
+        {
+            ++_error_count;
+        }
+    }
+
+    _prev_up = curr_up;
+    _prev_dn = curr_dn;
+    _prev_lf = curr_lf;
+    _prev_rt = curr_rt;
 }

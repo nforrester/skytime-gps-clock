@@ -1,64 +1,53 @@
 #pragma once
 
 #include <array>
+#include <cstdio>
 
-#include "FiveSimdHt16k33Busses.h"
+#include "Gpio.h"
 #include "RingBuffer.h"
 
 enum class Button {
     Up,
     Down,
     Left,
-    Right,
-    Plus,
-    Minus
+    Right
 };
 
 class Buttons
 {
 public:
-    Buttons(FiveSimdHt16k33Busses & busses);
+    Buttons(uint const pin_up, uint const pin_dn, uint const pin_lf, uint const pin_rt);
 
     void dispatch();
-    void begin_poll();
 
     bool get_button(Button & button);
 
     void dump_to_console_if_any_pressed()
     {
-        bool any_pressed = false;
-        for (uint8_t const byte : _button_data)
-        {
-            if (byte != 0)
-            {
-                any_pressed = true;
-            }
-        }
-        if (!any_pressed)
-        {
-            return;
-        }
+        bool any_pressed = _prev_up || _prev_dn || _prev_lf || _prev_rt;
 
-        printf("Buttons: ");
-        for (uint8_t const byte : _button_data)
+        if (any_pressed)
         {
-            printf("%02x ", byte);
+            printf("Buttons: ");
+            printf("%02x ", (_prev_up << 3 | _prev_dn << 2 | _prev_lf << 1 | _prev_rt));
+            printf("\n");
         }
-        printf("\n");
     }
 
     uint32_t error_count() const { return _error_count; }
 
 private:
-    static constexpr size_t num_button_bytes = 6;
-    static constexpr uint8_t chip_addr = 0x70;
-
-    FiveSimdHt16k33Busses & _busses;
-    bool _poll_in_progress = false;
-    bool _poll_requested = false;
     uint32_t _error_count = 0;
-    std::array<uint8_t, num_button_bytes> _button_data;
-    std::array<uint8_t, num_button_bytes> _last_button_data;
+
+    GpioIn _gpio_up;
+    GpioIn _gpio_dn;
+    GpioIn _gpio_lf;
+    GpioIn _gpio_rt;
+
+    bool _prev_up;
+    bool _prev_dn;
+    bool _prev_lf;
+    bool _prev_rt;
 
     RingBuffer<Button, 20> _button_events;
 };
