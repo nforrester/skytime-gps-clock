@@ -27,7 +27,7 @@ std::string shell(std::string const & command)
     return output.str();
 }
 
-std::vector<TimeZoneIana::Eon> zdump(std::string const & time_zone_name, int start_year, int end_year)
+std::vector<TimeZoneIana::Eon> zdump(std::string const & time_zone_name, int start_year, int end_year, std::map<std::string, std::string> const & abbrev_replacements)
 {
     std::istringstream zdump_output(shell("zdump -v " + time_zone_name));
 
@@ -127,7 +127,14 @@ std::vector<TimeZoneIana::Eon> zdump(std::string const & time_zone_name, int sta
         }
         eon.date.year = year;
 
-        eon.abbreviation = abbreviation;
+        if (abbrev_replacements.count(abbreviation))
+        {
+            eon.abbreviation = abbrev_replacements.at(abbreviation);
+        }
+        else
+        {
+            eon.abbreviation = abbreviation;
+        }
         eon.is_dst = isdst_str == "1";
         eon.utc_offset = std::stoi(gmtoff_str);
 
@@ -311,63 +318,107 @@ void dump_cpp(std::ostream & cpp, std::vector<std::tuple<std::string, std::vecto
     cpp << "}\n";
 }
 
+void check_abbreviations(std::vector<std::tuple<std::string, std::vector<TimeZoneIana::Eon>>> const & zones)
+{
+    std::map<std::string, int> abbreviation_to_off;
+    std::set<std::string> errors;
+    for (auto const & zone : zones)
+    {
+        auto const & name = get<std::string>(zone);
+        auto const & eons = get<std::vector<TimeZoneIana::Eon>>(zone);
+
+        for (TimeZoneIana::Eon const & eon : eons)
+        {
+            if (abbreviation_to_off.count(eon.abbreviation))
+            {
+                if (abbreviation_to_off.at(eon.abbreviation) != eon.utc_offset)
+                {
+                    errors.insert("Duplicate abbreviation " + eon.abbreviation + ": " + std::to_string(eon.utc_offset) + ", " + std::to_string(abbreviation_to_off.at(eon.abbreviation)));
+                }
+            }
+            else
+            {
+                abbreviation_to_off[eon.abbreviation] = eon.utc_offset;
+            }
+
+            if (eon.abbreviation[0] == '-' or eon.abbreviation[0] == '+')
+            {
+                errors.insert("No abbreviation for " + name + ": " + eon.abbreviation);
+            }
+        }
+    }
+
+    if (errors.size() > 0)
+    {
+        for (auto const & error : errors)
+        {
+            std::cerr << error << std::endl;
+        }
+        throw std::runtime_error("Time zone abbreviation errors.");
+    }
+}
+
 int main()
 {
-    std::vector<std::string> zones_to_generate = {
-        "Pacific/Midway",
-        "America/Adak",
-        "Pacific/Honolulu",
-        "Pacific/Marquesas",
-        "America/Anchorage",
-        "Pacific/Gambier",
-        "America/Los_Angeles",
-        "America/Denver",
-        "America/Phoenix",
-        "America/Chicago",
-        "America/New_York",
-        "America/Halifax",
-        "Canada/Newfoundland",
-        "Atlantic/Stanley",
-        "Atlantic/South_Georgia",
-        "Atlantic/Azores",
-        "Atlantic/Cape_Verde",
-        "Europe/London",
-        "Africa/Lagos",
-        "Europe/Paris",
-        "Africa/Johannesburg",
-        "Asia/Jerusalem",
-        "Europe/Istanbul",
-        "Asia/Tehran",
-        "Asia/Dubai",
-        "Asia/Kabul",
-        "Asia/Yekaterinburg",
-        "Asia/Kathmandu",
-        "Asia/Omsk",
-        "Asia/Yangon",
-        "Asia/Novosibirsk",
-        "Asia/Taipei",
-        "Australia/Eucla",
-        "Asia/Tokyo",
-        "Australia/Darwin",
-        "Australia/Adelaide",
-        "Australia/Brisbane",
-        "Australia/Sydney",
-        "Australia/Lord_Howe",
-        "Pacific/Guadalcanal",
-        "Pacific/Norfolk",
-        "Asia/Kamchatka",
-        "Pacific/Auckland",
-        "Pacific/Chatham",
-        "Pacific/Fakaofo",
-        "Pacific/Kiritimati",
+    std::map<std::string, std::map<std::string, std::string>> zones_to_generate = {
+        {"Pacific/Midway", {}},
+        {"America/Adak", {}},
+        {"Pacific/Honolulu", {}},
+        {"Pacific/Marquesas", {{"-0930", "MARQ"}}},
+        {"America/Anchorage", {}},
+        {"Pacific/Gambier", {{"-09", "AKST"}}},
+        {"America/Los_Angeles", {}},
+        {"America/Denver", {}},
+        {"America/Phoenix", {}},
+        {"America/Chicago", {}},
+        {"America/New_York", {}},
+        {"America/Halifax", {}},
+        {"Canada/Newfoundland", {}},
+        {"Atlantic/Stanley", {{"-03", "FKST"}}},
+        {"Atlantic/South_Georgia", {{"-02", "SGT"}}},
+        {"Atlantic/Azores", {{"+00", "UTC"}, {"-01", "CVT"}}},
+        {"Atlantic/Cape_Verde", {{"-01", "CVT"}}},
+        {"Europe/London", {}},
+        {"Africa/Lagos", {}},
+        {"Europe/Paris", {}},
+        {"Africa/Johannesburg", {}},
+        {"Asia/Jerusalem", {}},
+        {"Europe/Moscow", {}},
+        {"Asia/Tehran", {{"+0330", "IRST"}, {"+0430", "IRDT"}}},
+        {"Asia/Dubai", {{"+04", "DBI"}}},
+        {"Asia/Kabul", {{"+0430", "KBL"}}},
+        {"Asia/Karachi", {}},
+        {"Asia/Kathmandu", {{"+0545", "KTMD"}}},
+        {"Asia/Omsk", {{"+06", "OMSK"}}},
+        {"Asia/Yangon", {{"+0630", "YNGN"}}},
+        {"Asia/Jakarta", {}},
+        {"Asia/Taipei", {{"CST", "TWT"}}},
+        {"Australia/Eucla", {{"+0845", "EUCL"}}},
+        {"Asia/Tokyo", {}},
+        {"Australia/Darwin", {}},
+        {"Australia/Adelaide", {}},
+        {"Australia/Brisbane", {}},
+        {"Australia/Sydney", {}},
+        {"Australia/Lord_Howe", {{"+11", "AEDT"}, {"+1030", "LHST"}}},
+        {"Pacific/Guadalcanal", {{"+11", "GDCN"}}},
+        {"Pacific/Norfolk", {{"+11", "NFST"}, {"+12", "NFDT"}}},
+        {"Pacific/Kwajalein", {{"+12", "KWAJ"}}},
+        {"Pacific/Auckland", {}},
+        {"Pacific/Chatham", {{"+1245", "CTST"}, {"+1345", "CTDT"}}},
+        {"Pacific/Fakaofo", {{"+13", "FAKA"}}},
+        {"Pacific/Kiritimati", {{"+14", "KIRI"}}},
     };
 
     std::vector<std::tuple<std::string, std::vector<TimeZoneIana::Eon>>> zones;
 
-    for (auto const & name : zones_to_generate)
+    for (auto const & name_and_replacements : zones_to_generate)
     {
-        zones.push_back(std::make_tuple(name, zdump(name, 2020, 8000)));
+        auto const & name = name_and_replacements.first;
+        auto const & abbrev_replacements = name_and_replacements.second;
+        zones.push_back(std::make_tuple(name, zdump(name, 2020, 2150, abbrev_replacements)));
     }
+
+    check_abbreviations(zones);
 
     dump_cpp(std::cout, zones);
 
