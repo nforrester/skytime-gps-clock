@@ -40,6 +40,19 @@ Display::Display(FiveSimdHt16k33Busses & busses):
                 }),
         };
 
+    // Enable internal system clock
+    for (auto const & slice : _slices)
+    {
+        {
+            uint8_t constexpr command = 0x21;
+            if (!_busses.blocking_write(slice.address, 1, &command, &command, &command, &command, &command))
+            {
+                ::printf("HT16K33 Failed to enable internal system clock on bus slice %02x.\n", slice.address);
+                ++_error_count;
+            }
+        }
+    }
+
     // Set brightness
     _desired_pulse_width = 0;
     for (uint8_t & sb : _selected_pulse_width)
@@ -63,19 +76,9 @@ Display::Display(FiveSimdHt16k33Busses & busses):
         _make_progress_on_setting_brightness(_desired_pulse_width, true);
     }
 
+    // Display on, no blinking
     for (auto const & slice : _slices)
     {
-        // Enable internal system clock
-        {
-            uint8_t constexpr command = 0x21;
-            if (!_busses.blocking_write(slice.address, 1, &command, &command, &command, &command, &command))
-            {
-                ::printf("HT16K33 Failed to enable internal system clock on bus slice %02x.\n", slice.address);
-                ++_error_count;
-            }
-        }
-
-        // Display on, no blinking
         {
             uint8_t constexpr command = 0x81;
             if (!_busses.blocking_write(slice.address, 1, &command, &command, &command, &command, &command))
