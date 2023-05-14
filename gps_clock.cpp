@@ -237,7 +237,7 @@ int main()
         usec_t display_update_time_us = pps->get_time_us_of(completed_seconds, next_display_update_us);
         if (display_update_time_us <= time_us_64())
         {
-            uint8_t tenths = next_display_update_us / 100000;
+            uint8_t tenths = next_display_update_us / 100000 % 10;
             next_display_update_us += 100000;
             if (next_display_update_us == 1000000)
             {
