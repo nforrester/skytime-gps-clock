@@ -32,6 +32,8 @@ public:
 
     inline TopsOfSeconds const & tops_of_seconds() const { return _tops_of_seconds; }
 
+    void show_status() const;
+
 private:
     TopsOfSeconds _tops_of_seconds;
 
@@ -107,4 +109,7 @@ private:
 
     static uint8_t constexpr _sync1 = 181;
     static uint8_t constexpr _sync2 = 98;
+
+    uint64_t _msg_count_ubx_nav_pvt = 0;
+    uint64_t _msg_count_ubx_nav_time_ls = 0;
 };

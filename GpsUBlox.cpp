@@ -66,6 +66,11 @@ GpsUBlox::GpsUBlox(uart_inst_t * const uart_id, uint const tx_pin, uint const rx
     _initialized_successfully = true;
 }
 
+void GpsUBlox::show_status() const
+{
+    printf("GPS Message counts: %llu %llu\n", _msg_count_ubx_nav_pvt, _msg_count_ubx_nav_time_ls);
+}
+
 void GpsUBlox::Checksum::operator()(uint8_t const msg_class,
                                     uint8_t const msg_id,
                                     uint16_t const msg_len,
@@ -479,6 +484,7 @@ void GpsUBlox::dispatch()
                     _tops_of_seconds.prev().set_utc_ymdhms(year, month, day, hour, min, sec);
                     _tops_of_seconds.next().set_from_prev_second(_tops_of_seconds.prev());
                 }
+                ++_msg_count_ubx_nav_pvt;
             }
             else if (rx_msg_id == 0x26) // UBX-NAV-TIMELS
             {
@@ -542,6 +548,7 @@ void GpsUBlox::dispatch()
                     }
                     _tops_of_seconds.next().set_from_prev_second(_tops_of_seconds.prev());
                 }
+                ++_msg_count_ubx_nav_time_ls;
             }
         }
     }

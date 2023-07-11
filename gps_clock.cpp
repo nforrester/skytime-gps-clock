@@ -274,6 +274,7 @@ int main()
                    gps.tops_of_seconds().error_count(),
                    buttons.error_count(),
                    artist.error_count());
+            gps.show_status();
             analog.show_sensors();
             analog.print_time();
 
