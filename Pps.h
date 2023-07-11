@@ -34,6 +34,8 @@ public:
 
     bool locked() const { return _locked; }
 
+    void show_status() const;
+
 private:
     // Constants
     static constexpr uint32_t bicycles_per_chip_second = 125000000/2;

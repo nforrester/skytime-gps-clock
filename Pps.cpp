@@ -174,3 +174,9 @@ void Pps::get_time(uint32_t & completed_seconds, uint32_t & additional_microseco
     
     additional_microseconds = (chip_time - top_of_last_second_chip) / chip_time_per_gps_time;
 }
+
+void Pps::show_status() const
+{
+    printf("Bicycles per nominal pulse:%12" PRId32 "\n", bicycles_per_nominal_pulse);
+    printf("Bicycles in last pulse:    %12" PRId32 "\n", _bicycles_in_last_pulse_main_thread);
+}

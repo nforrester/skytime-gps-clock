@@ -275,6 +275,7 @@ int main()
                    buttons.error_count(),
                    artist.error_count());
             gps.show_status();
+            pps->show_status();
             analog.show_sensors();
             analog.print_time();
 
