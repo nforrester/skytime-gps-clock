@@ -198,10 +198,20 @@ int main()
     multicore_launch_core1(core1_main);
 
     printf("Begin main loop.\n");
+
+    /* This is more bits than needed for a single second, but while PPS is unlocked
+     * we keep accumulating time here, so it can run up arbitrarily high values. */
+    usec_t next_display_update_us = 0;
     uint32_t prev_completed_seconds = 0;
-    uint32_t next_display_update_us = 0;
+
     bool wwvb_needs_top_of_second = false;
     uint32_t wwvb_raise_power_us = 100000000; // Never
+
+    // Track LOS duration.
+    usec_t constexpr last_pps_unlocked_time_invalid = std::numeric_limits<usec_t>::max();
+    usec_t last_pps_unlocked_time = last_pps_unlocked_time_invalid;
+    usec_t total_pps_unlocked_duration = 0;
+
     while (true)
     {
         gps.dispatch();
@@ -232,6 +242,18 @@ int main()
                 wwvb_needs_top_of_second = false;
                 wwvb_raise_power_us = 100000000; // Never
             }
+
+            // Track LOS duration.
+            usec_t now = time_us_64();
+            if (last_pps_unlocked_time != last_pps_unlocked_time_invalid)
+            {
+                total_pps_unlocked_duration += now - last_pps_unlocked_time;
+                last_pps_unlocked_time = last_pps_unlocked_time_invalid;
+            }
+            if (!pps->locked())
+            {
+                last_pps_unlocked_time = now;
+            }
         }
 
         usec_t display_update_time_us = pps->get_time_us_of(completed_seconds, next_display_update_us);
@@ -244,7 +266,7 @@ int main()
                 next_display_update_us += 10000000; // Move the next update far into the future.
             }
 
-            artist.top_of_tenth_of_second(tenths);
+            artist.top_of_tenth_of_second(tenths, total_pps_unlocked_duration);
 
             display.dump_to_console(true);
             printf("Error counts: %ld %ld %ld %ld\n",

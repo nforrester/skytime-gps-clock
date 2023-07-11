@@ -11,6 +11,7 @@
 #include "Display.h"
 #include "Buttons.h"
 #include "GpsUBlox.h"
+#include "Pps.h"
 
 class Menuverable
 {
@@ -125,6 +126,22 @@ private:
     std::shared_ptr<TimeRepresentation> _time_rep;
 };
 
+class LosPrinter: public LinePrinter
+{
+public:
+    LosPrinter(Display & display,
+               usec_t & total_pps_unlocked_duration):
+    _disp(display),
+    _total_pps_unlocked_duration(total_pps_unlocked_duration)
+    {
+    }
+
+    void print(size_t line, uint8_t tenths) override;
+private:
+    Display & _disp;
+    usec_t & _total_pps_unlocked_duration;
+};
+
 class Artist
 {
 public:
@@ -132,7 +149,7 @@ public:
            Buttons & buttons,
            GpsUBlox & gps);
 
-    void top_of_tenth_of_second(uint8_t tenths);
+    void top_of_tenth_of_second(uint8_t tenths, usec_t total_pps_unlocked_duration);
     void button_pressed(Button button);
 
     uint32_t error_count() const { return _error_count; }
@@ -156,6 +173,8 @@ private:
     void _show_menu();
 
     IntSelector * _brightness;
+
+    usec_t _total_pps_unlocked_duration = 0;
 
     uint32_t _error_count = 0;
 };

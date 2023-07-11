@@ -141,7 +141,7 @@ uint32_t Pps::get_completed_seconds() const
     return _completed_seconds;
 }
 
-usec_t Pps::get_time_us_of(uint32_t completed_seconds, uint32_t additional_microseconds) const
+usec_t Pps::get_time_us_of(uint32_t completed_seconds, usec_t additional_microseconds) const
 {
     usec_t constexpr million = 1000000;
 

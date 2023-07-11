@@ -19,6 +19,9 @@ Artist::Artist(Display & display,
     }
 
     vector<tuple<string, shared_ptr<LinePrinter>>> line_options;
+    line_options.push_back(make_tuple(
+        "GPS LOS SEC",
+        make_shared<LosPrinter>(display, _total_pps_unlocked_duration)));
     for (auto & x : time_reps)
     {
         line_options.push_back(make_tuple(
@@ -29,10 +32,10 @@ Artist::Artist(Display & display,
     auto contents = make_unique<Menu>("Contents");
     array<std::string, Display::num_lines> defaults = {
             "America/Los_Angeles",
-            "America/Chicago",
             "Asia/Taipei",
             "Coordinated Universal Time",
             "International Atomic Time",
+            "GPS LOS SEC",
         };
     for (size_t line = 0; line < Display::num_lines; ++line)
     {
@@ -72,8 +75,10 @@ Artist::Artist(Display & display,
     _menu = move(menu);
 }
 
-void Artist::top_of_tenth_of_second(uint8_t tenths)
+void Artist::top_of_tenth_of_second(uint8_t tenths, usec_t total_pps_unlocked_duration)
 {
+    _total_pps_unlocked_duration = total_pps_unlocked_duration;
+
     if (_menu_depth == 0)
     {
         _show_main_display(tenths);
@@ -113,6 +118,16 @@ void TimePrinter::print(size_t line, uint8_t tenths)
         std::string abbrev = _time_rep->abbrev();
         print_result = _disp.printf(line, "%s Initializing...", abbrev.c_str());
     }
+    if (!print_result)
+    {
+        printf("Unable to format line %u of display\n", line);
+    }
+}
+
+void LosPrinter::print(size_t line, uint8_t /*tenths*/)
+{
+    bool print_result;
+    print_result = _disp.printf(line, "GPS LOS SEC.%9lld", _total_pps_unlocked_duration / 1000000);
     if (!print_result)
     {
         printf("Unable to format line %u of display\n", line);

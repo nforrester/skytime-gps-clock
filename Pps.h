@@ -28,7 +28,7 @@ public:
     void dispatch_main_thread();
 
     uint32_t get_completed_seconds() const;
-    usec_t get_time_us_of(uint32_t completed_seconds, uint32_t additional_microseconds) const;
+    usec_t get_time_us_of(uint32_t completed_seconds, usec_t additional_microseconds) const;
 
     void get_time(uint32_t & completed_seconds, uint32_t & additional_microseconds) const;
 
