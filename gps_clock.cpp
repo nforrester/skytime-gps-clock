@@ -66,26 +66,10 @@
 #include "Analog.h"
 
 std::unique_ptr<Pps> pps;
+bool volatile pps_go = false;
 
 void core1_main()
 {
-    pps->pio_init();
-    while (true)
-    {
-        pps->dispatch_fast_thread();
-    }
-}
-
-int main()
-{
-    bi_decl(bi_program_description("GPS Clock"));
-
-    stdio_init_all();
-
-    printf("Paused...\n");
-    sleep_ms(4000);
-    printf("Go!\n");
-
     uint constexpr led_pin = 25;
     bi_decl(bi_1pin_with_name(led_pin, "LED"));
     GpioOut led(led_pin);
@@ -194,8 +178,8 @@ int main()
 
     led.on();
 
-    printf("Launching PPS monitoring thread.\n");
-    multicore_launch_core1(core1_main);
+    printf("Releasing PPS monitoring thread.\n");
+    pps_go = true;
 
     printf("Begin main loop.\n");
 
@@ -303,5 +287,29 @@ int main()
         {
             wwvb.raise_power();
         }
+    }
+}
+
+int main()
+{
+    bi_decl(bi_program_description("GPS Clock"));
+
+    stdio_init_all();
+
+    printf("Paused...\n");
+    sleep_ms(4000);
+    printf("Go!\n");
+
+    printf("Launching Main Thread.\n");
+    multicore_launch_core1(core1_main);
+
+    while (!pps_go)
+    {
+    }
+
+    pps->pio_init();
+    while (true)
+    {
+        pps->dispatch_fast_thread();
     }
 }
