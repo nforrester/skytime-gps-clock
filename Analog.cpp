@@ -268,7 +268,7 @@ void Analog::_manage_tick_rate()
     float desired_tick_rate = _error_vs_actual_time_ms / 1000.0 / 20.0 + 1.0;
     _sync_halt = false;
 
-    float constexpr max_tick_rate_delta = 0.2;
+    float constexpr max_tick_rate_delta = 0.13;
 
     if (!_hand_pose_locked())
     {
