@@ -13,7 +13,9 @@
   uint64_t time_us_64();
 #endif
 
+#include <limits>
 #include "MovingAverage.h"
+#include "Artist.h"
 
 using usec_t = uint64_t;
 using susec_t = int64_t;
@@ -35,6 +37,24 @@ public:
     bool locked() const { return _locked; }
 
     void show_status() const;
+
+    class LosPrinter: public LinePrinter
+    {
+    public:
+        LosPrinter(Display & display,
+                   usec_t & total_pps_unlocked_duration):
+        _disp(display),
+        _total_pps_unlocked_duration(total_pps_unlocked_duration)
+        {
+        }
+
+        void print(size_t line, uint8_t tenths) override;
+    private:
+        Display & _disp;
+        usec_t & _total_pps_unlocked_duration;
+    };
+
+    std::tuple<std::string, std::shared_ptr<LosPrinter>> los_printer(Display & display);
 
 private:
     // Constants
@@ -70,5 +90,10 @@ private:
     int32_t static constexpr _lock_persistence_rate_down           =  -1;
     int32_t _lock_persistence = _lock_persistence_saturation_limit_lo;
     bool _locked = false;
+
+    // Track LOS duration.
+    usec_t static constexpr _last_pps_unlocked_time_invalid = std::numeric_limits<usec_t>::max();
+    usec_t _last_pps_unlocked_time = _last_pps_unlocked_time_invalid;
+    usec_t _total_pps_unlocked_duration = 0;
 };
 

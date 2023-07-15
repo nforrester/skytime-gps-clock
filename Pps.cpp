@@ -132,6 +132,18 @@ void Pps::dispatch_main_thread()
             printf("PPS lock persistence: %" PRId32 "\n", _lock_persistence);
         }
 
+        // Track LOS duration.
+        usec_t chip_time = time_us_64();
+        if (_last_pps_unlocked_time != _last_pps_unlocked_time_invalid)
+        {
+            _total_pps_unlocked_duration += chip_time - _last_pps_unlocked_time;
+            _last_pps_unlocked_time = _last_pps_unlocked_time_invalid;
+        }
+        if (!_locked)
+        {
+            _last_pps_unlocked_time = chip_time;
+        }
+
         _prev_completed_seconds = completed_seconds;
     }
 }
@@ -179,4 +191,20 @@ void Pps::show_status() const
 {
     printf("Bicycles per nominal pulse:%12" PRId32 "\n", bicycles_per_nominal_pulse);
     printf("Bicycles in last pulse:    %12" PRId32 "\n", _bicycles_in_last_pulse_main_thread);
+}
+
+void Pps::LosPrinter::print(size_t line, uint8_t /*tenths*/)
+{
+    bool print_result;
+    print_result = _disp.printf(line, "GPS LOS SEC.%9lld", _total_pps_unlocked_duration / 1000000);
+    if (!print_result)
+    {
+        printf("Unable to format line %u of display\n", line);
+    }
+}
+
+std::tuple<std::string, std::shared_ptr<Pps::LosPrinter>> Pps::los_printer(Display & display)
+{
+    return make_tuple("GPS LOS SEC",
+                      std::make_shared<LosPrinter>(display, _total_pps_unlocked_duration));
 }

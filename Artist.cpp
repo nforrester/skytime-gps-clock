@@ -1,15 +1,16 @@
 #include "Artist.h"
 #include "iana_time_zones.h"
 
+using namespace std;
+
 Artist::Artist(Display & display,
                Buttons & buttons,
-               GpsUBlox & gps):
+               GpsUBlox & gps,
+               vector<tuple<string, shared_ptr<LinePrinter>>> const & extra_line_options):
     _disp(display),
     _buttons(buttons),
     _gps(gps)
 {
-    using namespace std;
-
     vector<tuple<string, shared_ptr<TimeRepresentation>>> time_reps;
     time_reps.push_back(make_tuple("International Atomic Time",  make_shared<TimeRepTai>()));
     time_reps.push_back(make_tuple("Coordinated Universal Time", make_shared<TimeZoneFixed>("UTC", 0, false)));
@@ -19,9 +20,10 @@ Artist::Artist(Display & display,
     }
 
     vector<tuple<string, shared_ptr<LinePrinter>>> line_options;
-    line_options.push_back(make_tuple(
-        "GPS LOS SEC",
-        make_shared<LosPrinter>(display, _total_pps_unlocked_duration)));
+    for (auto & x : extra_line_options)
+    {
+        line_options.push_back(x);
+    }
     for (auto & x : time_reps)
     {
         line_options.push_back(make_tuple(
@@ -30,7 +32,7 @@ Artist::Artist(Display & display,
     }
 
     auto contents = make_unique<Menu>("Contents");
-    array<std::string, Display::num_lines> defaults = {
+    array<string, Display::num_lines> defaults = {
             "America/Los_Angeles",
             "Asia/Taipei",
             "Coordinated Universal Time",
@@ -75,10 +77,8 @@ Artist::Artist(Display & display,
     _menu = move(menu);
 }
 
-void Artist::top_of_tenth_of_second(uint8_t tenths, usec_t total_pps_unlocked_duration)
+void Artist::top_of_tenth_of_second(uint8_t tenths)
 {
-    _total_pps_unlocked_duration = total_pps_unlocked_duration;
-
     if (_menu_depth == 0)
     {
         _show_main_display(tenths);
@@ -100,7 +100,7 @@ void TimePrinter::print(size_t line, uint8_t tenths)
     bool print_result;
     if (_time_rep->make_ymdhms(_gps.tops_of_seconds().prev(), ymdhms))
     {
-        std::string abbrev = _time_rep->abbrev(_gps.tops_of_seconds().prev().utc_ymdhms);
+        string abbrev = _time_rep->abbrev(_gps.tops_of_seconds().prev().utc_ymdhms);
         print_result = _disp.printf(
             line,
             "%-4s%04d.%02d.%02d %02d.%02d.%02d.%d",
@@ -115,19 +115,9 @@ void TimePrinter::print(size_t line, uint8_t tenths)
     }
     else
     {
-        std::string abbrev = _time_rep->abbrev();
+        string abbrev = _time_rep->abbrev();
         print_result = _disp.printf(line, "%s Initializing...", abbrev.c_str());
     }
-    if (!print_result)
-    {
-        printf("Unable to format line %u of display\n", line);
-    }
-}
-
-void LosPrinter::print(size_t line, uint8_t /*tenths*/)
-{
-    bool print_result;
-    print_result = _disp.printf(line, "GPS LOS SEC.%9lld", _total_pps_unlocked_duration / 1000000);
     if (!print_result)
     {
         printf("Unable to format line %u of display\n", line);
@@ -209,8 +199,8 @@ void Artist::_show_menu()
         return;
     }
 
-    std::string const & name = menu->name();
-    std::string title_line;
+    string const & name = menu->name();
+    string title_line;
     for (size_t col = 0; col < Display::line_length; ++col)
     {
         if (col < name.size())
@@ -258,7 +248,7 @@ void Menuverable::show(Display & display) const
         }
         else
         {
-            std::string your_name = item_name(item);
+            string your_name = item_name(item);
             display.printf(1+item-first_item_to_show, "%s%s", (item == selected() ? ">" : " "), your_name.c_str());
         }
     }
@@ -266,7 +256,7 @@ void Menuverable::show(Display & display) const
 
 void IntSelector::show(Display & display) const
 {
-    std::string your_name = item_name(selected());
+    string your_name = item_name(selected());
     display.printf(1, "%s", your_name.c_str());
     display.printf(2, " ");
     display.printf(3, " ");

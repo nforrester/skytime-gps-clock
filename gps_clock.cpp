@@ -153,7 +153,9 @@ void core1_main()
         printf("Buttons init FAILED. Error count: %ld.\n", buttons.error_count());
     }
 
-    Artist artist(display, buttons, gps);
+    std::vector<std::tuple<std::string, std::shared_ptr<LinePrinter>>> extra_line_options;
+    extra_line_options.push_back(pps->los_printer(display));
+    Artist artist(display, buttons, gps, extra_line_options);
     printf("Artist init complete.\n");
 
     uint constexpr wwvb_carrier_pin = 20;
@@ -191,11 +193,6 @@ void core1_main()
     bool wwvb_needs_top_of_second = false;
     uint32_t wwvb_raise_power_us = 100000000; // Never
 
-    // Track LOS duration.
-    usec_t constexpr last_pps_unlocked_time_invalid = std::numeric_limits<usec_t>::max();
-    usec_t last_pps_unlocked_time = last_pps_unlocked_time_invalid;
-    usec_t total_pps_unlocked_duration = 0;
-
     while (true)
     {
         gps.dispatch();
@@ -226,18 +223,6 @@ void core1_main()
                 wwvb_needs_top_of_second = false;
                 wwvb_raise_power_us = 100000000; // Never
             }
-
-            // Track LOS duration.
-            usec_t now = time_us_64();
-            if (last_pps_unlocked_time != last_pps_unlocked_time_invalid)
-            {
-                total_pps_unlocked_duration += now - last_pps_unlocked_time;
-                last_pps_unlocked_time = last_pps_unlocked_time_invalid;
-            }
-            if (!pps->locked())
-            {
-                last_pps_unlocked_time = now;
-            }
         }
 
         usec_t display_update_time_us = pps->get_time_us_of(completed_seconds, next_display_update_us);
@@ -250,7 +235,7 @@ void core1_main()
                 next_display_update_us += 10000000; // Move the next update far into the future.
             }
 
-            artist.top_of_tenth_of_second(tenths, total_pps_unlocked_duration);
+            artist.top_of_tenth_of_second(tenths);
 
             display.dump_to_console(true);
             printf("Error counts: %ld %ld %ld %ld\n",
