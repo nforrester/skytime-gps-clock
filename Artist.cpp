@@ -37,7 +37,7 @@ Artist::Artist(Display & display,
             "Asia/Taipei",
             "Coordinated Universal Time",
             "International Atomic Time",
-            "GPS LOS SEC",
+            "Analog Clock Time",
         };
     for (size_t line = 0; line < Display::num_lines; ++line)
     {

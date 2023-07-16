@@ -242,13 +242,19 @@ uint8_t Analog::HandModel::displayed_time_units(int32_t child_hand_persexage) co
     return result;
 }
 
+void Analog::get_analog_time(Time & time) const
+{
+    time.sec_rem = _sec_hand.ticks_remainder();
+    time.sec = _sec_hand.displayed_time_units(-1);
+    time.min = _min_hand.displayed_time_units(time.sec);
+    time.hour = _hour_hand.displayed_time_units(time.min);
+}
+
 void Analog::print_time() const
 {
-    int32_t sec_rem = _sec_hand.ticks_remainder();
-    int8_t sec = _sec_hand.displayed_time_units(-1);
-    int8_t min = _min_hand.displayed_time_units(sec);
-    int8_t hour = _hour_hand.displayed_time_units(min);
-    printf("Analog time: %02d:%02d:%02d.%03" PRId32 "\n", hour, min, sec, sec_rem*1000/16);
+    Time t;
+    get_analog_time(t);
+    printf("Analog time: %02d:%02d:%02d.%03" PRId32 "\n", t.hour, t.min, t.sec, t.sec_rem*1000/16);
     printf("TST Hour:   %9" PRId32 "\n", _hour_hand.ticks_since_top);
     printf("TST Minute: %9" PRId32 "\n", _min_hand.ticks_since_top);
     printf("TST Second: %9" PRId32 "\n", _sec_hand.ticks_since_top);
@@ -354,4 +360,23 @@ bool Analog::unit_test()
 #endif
 
     return true;
+}
+
+void Analog::AnalogTimePrinter::print(size_t line, uint8_t /*tenths*/)
+{
+    Time t;
+    _get_analog_time(t);
+    bool print_result;
+    print_result = _disp.printf(line, "Analog clock %02d.%02d.%02d.%01" PRIx32, t.hour, t.min, t.sec, t.sec_rem);
+
+    if (!print_result)
+    {
+        printf("Unable to format line %u of display\n", line);
+    }
+}
+
+std::tuple<std::string, std::shared_ptr<Analog::AnalogTimePrinter>> Analog::analog_time_printer(Display & display)
+{
+    return make_tuple("Analog Clock Time",
+                      std::make_shared<AnalogTimePrinter>(display, std::bind(&Analog::get_analog_time, this, std::placeholders::_1)));
 }

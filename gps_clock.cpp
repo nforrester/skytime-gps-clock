@@ -153,11 +153,6 @@ void core1_main()
         printf("Buttons init FAILED. Error count: %ld.\n", buttons.error_count());
     }
 
-    std::vector<std::tuple<std::string, std::shared_ptr<LinePrinter>>> extra_line_options;
-    extra_line_options.push_back(pps->los_printer(display));
-    Artist artist(display, buttons, gps, extra_line_options);
-    printf("Artist init complete.\n");
-
     uint constexpr wwvb_carrier_pin = 20;
     uint constexpr wwvb_reduce_pin = 19;
     bi_decl(bi_1pin_with_name(wwvb_carrier_pin, "WWVB CARRIER"));
@@ -177,6 +172,12 @@ void core1_main()
     bi_decl(bi_1pin_with_name(sense6_pin, "ANALOG SENSE 6"));
     bi_decl(bi_1pin_with_name(sense9_pin, "ANALOG SENSE 9"));
     Analog analog(*pps, analog_tick_pin, sense0_pin, sense3_pin, sense6_pin, sense9_pin);
+
+    std::vector<std::tuple<std::string, std::shared_ptr<LinePrinter>>> extra_line_options;
+    extra_line_options.push_back(pps->los_printer(display));
+    extra_line_options.push_back(analog.analog_time_printer(display));
+    Artist artist(display, buttons, gps, extra_line_options);
+    printf("Artist init complete.\n");
 
     led.on();
 

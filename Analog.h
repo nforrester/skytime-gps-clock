@@ -3,9 +3,11 @@
 #include "iana_time_zones.h"
 
 #include "Gpio.h"
+#include "Artist.h"
 
 #include <array>
 #include <memory>
+#include <functional>
 
 class Analog
 {
@@ -20,9 +22,36 @@ public:
     void dispatch(uint32_t const completed_seconds);
     void show_sensors();
 
+    static bool unit_test();
+
+    struct Time
+    {
+        int32_t sec_rem;
+        int8_t sec;
+        int8_t min;
+        int8_t hour;
+    };
+
+    void get_analog_time(Time & time) const;
     void print_time() const;
 
-    static bool unit_test();
+    class AnalogTimePrinter: public LinePrinter
+    {
+    public:
+        AnalogTimePrinter(Display & display,
+                         std::function<void(Time&)> get_analog_time):
+        _disp(display),
+        _get_analog_time(get_analog_time)
+        {
+        }
+
+        void print(size_t line, uint8_t tenths) override;
+    private:
+        Display & _disp;
+        std::function<void(Time&)> _get_analog_time;
+    };
+
+    std::tuple<std::string, std::shared_ptr<AnalogTimePrinter>> analog_time_printer(Display & display);
 
 private:
     Pps const & _pps;
