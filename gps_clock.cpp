@@ -281,9 +281,9 @@ int main()
 
     stdio_init_all();
 
-    printf("Paused...\n");
-    sleep_ms(4000);
-    printf("Go!\n");
+    //printf("Paused...\n");
+    //sleep_ms(4000);
+    //printf("Go!\n");
 
     printf("Launching Main Thread.\n");
     multicore_launch_core1(core1_main);
